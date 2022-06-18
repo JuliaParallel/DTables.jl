@@ -16,17 +16,17 @@ julia> d = DTable((a=shuffle(repeat('a':'d', inner=4, outer=4)),), 4)
 DTable with 16 partitions
 Tabletype: NamedTuple
 
-julia> Dagger.groupby(d, :a)
+julia> DTables.groupby(d, :a)
 GDTable with 4 partitions and 4 keys
 Tabletype: NamedTuple
 Grouped by: [:a]
 
-julia> Dagger.groupby(d, :a, chunksize=3)
+julia> DTables.groupby(d, :a, chunksize=3)
 GDTable with 24 partitions and 4 keys
 Tabletype: NamedTuple
 Grouped by: [:a]
 
-julia> Dagger.groupby(d, :a, merge=false)
+julia> DTables.groupby(d, :a, merge=false)
 GDTable with 42 partitions and 4 keys
 Tabletype: NamedTuple
 Grouped by: [:a]
@@ -52,17 +52,17 @@ julia> d = DTable((a=shuffle(repeat('a':'d', inner=4, outer=4)),b=repeat(1:4, 16
 DTable with 16 partitions
 Tabletype: NamedTuple
 
-julia> Dagger.groupby(d, [:a,:b])
+julia> DTables.groupby(d, [:a,:b])
 GDTable with 16 partitions and 16 keys
 Tabletype: NamedTuple
 Grouped by: [:a, :b]
 
-julia> Dagger.groupby(d, [:a,:b], chunksize=3)
+julia> DTables.groupby(d, [:a,:b], chunksize=3)
 GDTable with 27 partitions and 16 keys
 Tabletype: NamedTuple
 Grouped by: [:a, :b]
 
-julia> Dagger.groupby(d, [:a,:b], merge=false)
+julia> DTables.groupby(d, [:a,:b], merge=false)
 GDTable with 64 partitions and 16 keys
 Tabletype: NamedTuple
 Grouped by: [:a, :b]
@@ -91,17 +91,17 @@ julia> function group_fun(row)
        end
 group_fun (generic function with 1 method)
 
-julia> Dagger.groupby(d, group_fun)
+julia> DTables.groupby(d, group_fun)
 GDTable with 7 partitions and 7 keys
 Tabletype: NamedTuple
 Grouped by: group_fun
 
-julia> Dagger.groupby(d, row -> row.a + row.b, chunksize=3)
+julia> DTables.groupby(d, row -> row.a + row.b, chunksize=3)
 GDTable with 25 partitions and 7 keys
 Tabletype: NamedTuple
 Grouped by: group_fun
 
-julia> Dagger.groupby(d, row -> row.a + row.b, merge=false)
+julia> DTables.groupby(d, row -> row.a + row.b, merge=false)
 GDTable with 52 partitions and 7 keys
 Tabletype: NamedTuple
 Grouped by: group_fun
@@ -123,7 +123,7 @@ function _groupby(
 
     grouping_function = cols === nothing ? row_function : nothing
 
-    spawner = (_dchunks, _row_function) -> Vector{EagerThunk}([Dagger.@spawn distinct_partitions(c, _row_function) for c in _dchunks])
+    spawner = (_dchunks, _row_function) -> Vector{Dagger.EagerThunk}([Dagger.@spawn distinct_partitions(c, _row_function) for c in _dchunks])
 
     v = Dagger.@spawn spawner(d.chunks, row_function)
     index, chunks = fetch(Dagger.@spawn build_groupby_index(merge, chunksize, tabletype(d), v))
@@ -152,7 +152,7 @@ function _distinct_partitions_iterate(chunk, f, keyval::T) where T
         push!(v, row)
     end
 
-    Vector{Pair{T, Chunk}}([x => Dagger.tochunk(Tables.columntable(acc[x])) for x in collect(keys(acc))])
+    Vector{Pair{T, Dagger.Chunk}}([x => Dagger.tochunk(Tables.columntable(acc[x])) for x in collect(keys(acc))])
 end
 
 rowcount(chunk) = length(Tables.rows(chunk))
@@ -176,7 +176,7 @@ function build_groupby_index(
     @assert typeof(v1) <: Vector
     @assert eltype(v1) <: Pair
     keytype = eltype(v1).types[1]
-    chunks = Vector{Chunk}()
+    chunks = Vector{Dagger.Chunk}()
     idx = Dict{keytype, Vector{UInt}}()
 
     i = one(UInt)
@@ -195,7 +195,7 @@ function build_groupby_index(
 
     if merge && chunksize <= 0 # merge all partitions into one
         sink = Tables.materializer(tabletype())
-        merged_chunks = Vector{Union{EagerThunk, Chunk}}()
+        merged_chunks = Vector{Union{Dagger.EagerThunk, Dagger.Chunk}}()
         sizehint!(merged_chunks, length(keys(idx)))
 
         merge_spawner = (_chunks, _partition, _idx, _sink) -> begin
@@ -215,7 +215,7 @@ function build_groupby_index(
 
     elseif merge && chunksize > 0 # merge all but try to merge all the small chunks into chunks of chunksize
         sink = Tables.materializer(tabletype())
-        merged_chunks = Vector{Union{EagerThunk, Chunk}}()
+        merged_chunks = Vector{Union{Dagger.EagerThunk, Dagger.Chunk}}()
 
         all_lengths = [Dagger.@spawn rowcount(c) for c in chunks]
 

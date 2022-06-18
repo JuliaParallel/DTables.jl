@@ -177,7 +177,7 @@ function _join(
 
     vs = [Dagger.@spawn process_one_chunk(type, l_chunk, chunk, cmp_l, cmp_r, other_r, lookup, r_sorted, l_sorted, r_unique) for chunk in r.chunks]
 
-    to_merge = Vector{Chunk}()
+    to_merge = Vector{Dagger.Chunk}()
     sizehint!(to_merge, length(r.chunks))
 
     v = fetch.(vs)

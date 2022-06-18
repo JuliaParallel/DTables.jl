@@ -1,4 +1,4 @@
-using Dagger
+import Dagger
 using Test
 using Tables
 using DataFrames
@@ -13,7 +13,7 @@ import SentinelArrays
         df = fetch(dt, DataFrame)
 
         t = (args...) -> begin
-            dt_01 = Dagger.select(dt, args...)
+            dt_01 = DTables.select(dt, args...)
             df_01 = DataFrames.select(df, args...)
 
             result = try
@@ -46,10 +46,10 @@ import SentinelArrays
         @test t(names(dt) .=> sum, names(dt) .=> mean .=> "test" .* names(dt))
         @test t(AsTable([:a, :b]) => ByRow(identity))
         @test t(AsTable([:a, :b]) => ByRow(identity) => AsTable)
-        # @test # t(AsTable([:a, :b]) => identity) # this fails on dataframes, but not on dtable
-        @test t(AsTable([:a, :b]) => identity => AsTable) # but this is fine on DataFrames
+        # @test # t(AsTable([:a, :b]) => identity) # this should technically fail on DTables
+        @test t(AsTable([:a, :b]) => identity => AsTable)
         @test t([] => ByRow(() -> 1) => :x)
-        @test fetch(Dagger.select(dt, [] => ByRow(rand) => :x)).x isa SentinelArrays.ChainedVector{Float64, Vector{Float64}}
-        @test fetch(Dagger.select(dt, [] => (() -> rand(s)) => :x)).x isa SentinelArrays.ChainedVector{Float64, Vector{Float64}}
+        @test fetch(DTables.select(dt, [] => ByRow(rand) => :x)).x isa SentinelArrays.ChainedVector{Float64, Vector{Float64}}
+        @test fetch(DTables.select(dt, [] => (() -> rand(s)) => :x)).x isa SentinelArrays.ChainedVector{Float64, Vector{Float64}}
     end
 end

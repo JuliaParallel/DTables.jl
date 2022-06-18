@@ -47,7 +47,7 @@ The applied function needs to return a `Tables.Row` compatible object (e.g. `Nam
 
 # Examples
 ```julia
-julia> g = Dagger.groupby(DTable((a=repeat('a':'c', inner=2),b=1:6), 2), :a)
+julia> g = DTables.groupby(DTable((a=repeat('a':'c', inner=2),b=1:6), 2), :a)
 GDTable with 3 partitions and 3 keys
 Tabletype: NamedTuple
 Grouped by: [:a]
@@ -83,13 +83,13 @@ as it follows the same principles.
 julia> d = DTable((a = [1, 2, 3], b = [1, 1, 1]), 2);
 
 julia> r1 = reduce(+, d)
-EagerThunk (running)
+Dagger.EagerThunk (running)
 
 julia> fetch(r1)
 (a = 6, b = 3)
 
 julia> r2 = reduce(*, d, cols=[:a])
-EagerThunk (running)
+Dagger.EagerThunk (running)
 
 julia> fetch(r2)
 (a = 6,)
@@ -114,7 +114,7 @@ function reduce(f, d::DTable; cols=nothing::Union{Nothing, Vector{Symbol}}, init
 end
 
 
-function _reduce_chunks(f, chunks::Vector{Union{EagerThunk, Chunk}}, columns::Vector{Symbol}; init=Base._InitialValue())
+function _reduce_chunks(f, chunks::Vector{Union{Dagger.EagerThunk, Dagger.Chunk}}, columns::Vector{Symbol}; init=Base._InitialValue())
     col_in_chunk_reduce = (_f, _c, _init, _chunk) -> reduce(_f, Tables.getcolumn(_chunk, _c); init=_init)
 
     chunk_reduce = (_f, _chunk, _cols, _init) -> begin
@@ -139,7 +139,7 @@ function _reduce_chunks(f, chunks::Vector{Union{EagerThunk, Chunk}}, columns::Ve
 end
 
 """
-    reduce(f, gd::GDTable; cols=nothing, prefix="result_", [init]) -> EagerThunk -> NamedTuple
+    reduce(f, gd::GDTable; cols=nothing, prefix="result_", [init]) -> Dagger.EagerThunk -> NamedTuple
 
 Reduces `gd` using function `f` applied on all columns of the DTable.
 Returns results per group in columns with names prefixed with the `prefix` kwarg.
@@ -147,7 +147,7 @@ For more information on kwargs see `reduce(f, d::DTable)`
 
 # Examples
 ```julia
-julia> g = Dagger.groupby(DTable((a=repeat('a':'d', inner=2),b=1:8), 2), :a)
+julia> g = DTables.groupby(DTable((a=repeat('a':'d', inner=2),b=1:8), 2), :a)
 GDTable with 4 partitions and 4 keys
 Tabletype: NamedTuple
 Grouped by: [:a]
@@ -228,7 +228,7 @@ Calling `trim!` on a filtered `GDTable` will clean up the empty keys and partiti
 
 # Examples
 ```julia
-julia> g = Dagger.groupby(DTable((a=repeat('a':'d', inner=2),b=1:8), 2), :a)
+julia> g = DTables.groupby(DTable((a=repeat('a':'d', inner=2),b=1:8), 2), :a)
 GDTable with 4 partitions and 4 keys
 Tabletype: NamedTuple
 Grouped by: [:a]
@@ -277,7 +277,7 @@ function mapreduce(f, op, d::DTable; init=Base._InitialValue())
 end
 
 
-function _mapreduce_rows_in_chunks(fmap, f, chunks::Vector{Union{EagerThunk,Chunk}}; init=Base._InitialValue())
+function _mapreduce_rows_in_chunks(fmap, f, chunks::Vector{Union{Dagger.EagerThunk,Dagger.Chunk}}; init=Base._InitialValue())
     col_in_chunk_reduce = (_f, _init, _chunk) -> reduce(_f, TableOperations.map(fmap, _chunk); init=deepcopy(_init))
     chunk_reduce_spawner = (_d, _f, _init) -> [Dagger.@spawn col_in_chunk_reduce(_f, _init, c) for c in _d]
     Dagger.@spawn chunk_reduce_spawner(chunks, f, init)

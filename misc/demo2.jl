@@ -1,12 +1,12 @@
 using DataFrames
-using Dagger
+import Dagger
 using Statistics
 
-r(d::Dagger.DTable, args...) = fetch(Dagger.select(d, args...), DataFrame)
+r(d::Dagger.DTable, args...) = fetch(DTables.select(d, args...), DataFrame)
 
 r(d::DataFrames.DataFrame, args...) = (DataFrames.select(d, args...);)
 
-t(d::Dagger.DTable, args...) = @time wait(Dagger.select(d, args...))
+t(d::Dagger.DTable, args...) = @time wait(DTables.select(d, args...))
 
 t(d::DataFrames.DataFrame, args...) = (@time DataFrames.select(d, args...); nothing)
 
@@ -39,5 +39,3 @@ r(dt, [] => ByRow(rand) => :x) # make this work
 r(dt, :a => mean)
 
 @time map(row -> (a=row.a, b=row.b), dt)
-
-
