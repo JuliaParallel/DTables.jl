@@ -6,7 +6,7 @@ DocMeta.setdocmeta!(DTables, :DocTestSetup, :(using DTables); recursive=true)
 makedocs(;
     modules=[DTables],
     authors="Krystian Guliński, Julian Samaroo, and contributors",
-    repo="https://github.com/juliaparallel/DTables.jl/blob/{commit}{path}#{line}",
+    repo="https://github.com/JuliaParallel/DTables.jl/blob/{commit}{path}#{line}",
     sitename="DTables.jl",
     format=Documenter.HTML(;
         prettyurls=get(ENV, "CI", "false") == "true",
@@ -20,6 +20,6 @@ makedocs(;
 )
 
 deploydocs(;
-    repo="github.com/juliaparallel/DTables.jl",
+    repo="github.com/JuliaParallel/DTables.jl",
     devbranch="main",
 )
