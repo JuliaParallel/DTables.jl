@@ -8,6 +8,14 @@ Distributed table structures and data manipulation operations built on top of [D
 [![Coverage](https://codecov.io/gh/juliaparallel/DTables.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/juliaparallel/DTables.jl)
 [![Code Style: Blue](https://img.shields.io/badge/code%20style-blue-4495d1.svg)](https://github.com/invenia/BlueStyle)
 
+# Installation
+
+The package is not registered yet, but you can add it to your environment using the repository url:
+
+```julia
+]add https://github.com/JuliaParallel/DTables.jl
+```
+
 # Usage
 
 Below you can find a quick example on how to get started with DTables.
