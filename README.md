@@ -10,10 +10,10 @@ Distributed table structures and data manipulation operations built on top of [D
 
 # Installation
 
-The package is not registered yet, but you can add it to your environment using the repository url:
+The package registered in the general repository, so you can add it by typing:
 
 ```julia
-]add https://github.com/JuliaParallel/DTables.jl
+julia> ]add DTables
 ```
 
 # Usage
