@@ -61,24 +61,22 @@ length(dtc::DTableColumn) = sum(dtc.chunk_lengths)
 # end
 
 
-function pull_next_chunk(dtc::DTableColumn, c_idx::Int)
+function pull_next_chunk!(dtc::DTableColumn)
     # find first non-empty chunk
     while dtc._iter === nothing
-        c_idx += 1
-        if c_idx <= nchunks(dtc.dtable)
+        dtc._chunk += 1
+        if dtc._chunk <= nchunks(dtc.dtable)
             dtc._chunkstore = fetch(Dagger.spawn(
                 getcolumn_chunk,
-                dtc.dtable.chunks[c_idx],
+                dtc.dtable.chunks[dtc._chunk],
                 dtc.col
             ))
         else
-            dtc._chunk = c_idx
             return nothing
         end
         # iterate in case this chunk is empty
         dtc._iter = iterate(dtc._chunkstore)
     end
-    dtc._chunk = c_idx
     return nothing
 end
 
@@ -92,7 +90,7 @@ function iterate(dtc::DTableColumn)
     dtc._chunk = 0
 
     # pull the first chunk
-    pull_next_chunk(dtc, 0)
+    pull_next_chunk!(dtc)
 
     return dtc._iter
 end
@@ -100,6 +98,6 @@ end
 function iterate(dtc::DTableColumn, iter)
     dtc._chunkstore === nothing && return nothing
     dtc._iter = iterate(dtc._chunkstore, iter)
-    pull_next_chunk(dtc, dtc._chunk)
+    pull_next_chunk!(dtc)
     return dtc._iter
 end
