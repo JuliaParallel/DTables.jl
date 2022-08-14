@@ -1,101 +1,105 @@
-
 mutable struct DTableColumn{T,TT}
     dtable::DTable
-    current_chunk::Int
     col::Int
     colname::Symbol
     chunk_lengths::Vector{Int}
-    current_iterator::Union{Nothing,TT}
-    chunkstore::Union{Nothing,Vector{T}}
+    _chunk::Int
+    _iter::Union{Nothing,TT}
+    _chunkstore::Union{Nothing,Vector{T}}
 end
 
-__ff = (ch, col) -> Tables.getcolumn(Tables.columns(ch), col)
+function getcolumn_chunk(chunk_contents, col::Int)
+    return Tables.getcolumn(Tables.columns(chunk_contents), col)
+end
 
-function DTableColumn(dtable::DTable, col::Int)
-    column_eltype = Tables.schema(Tables.columns(dtable)).types[col]
-    iterator_type = fetch(Dagger.spawn((ch, _col) -> typeof(iterate(__ff(ch, _col))), dtable.chunks[1], col))
+function DTableColumn(d::DTable, col::Int)
+    column_eltype = Tables.schema(Tables.columns(d)).types[col]
+    iterator_type = fetch(Dagger.spawn(
+        (ch, _col) -> typeof(iterate(getcolumn_chunk(ch, _col))),
+        d.chunks[1],
+        col
+    ))
 
     DTableColumn{column_eltype,iterator_type}(
-        dtable,
-        0,
+        d,
         col,
-        _columnnames_svector(dtable)[col],
-        chunk_lengths(dtable),
+        _columnnames_svector(d)[col],
+        chunk_lengths(d),
+        0,
         nothing,
         nothing,
     )
 end
 
 
-function getindex(dtablecolumn::DTableColumn, idx::Int)
-    chunk_idx = 0
-    s = 1
-    for (i, e) in enumerate(dtablecolumn.chunk_lengths)
-        if s <= idx < s + e
-            chunk_idx = i
-            break
-        end
-        s = s + e
-    end
-    chunk_idx == 0 && throw(BoundsError())
-    offset = idx - s + 1
-    chunk = fetch(Dagger.spawn(__ff, dtablecolumn.dtable.chunks[chunk_idx], dtablecolumn.col))
+DTableColumn(d::DTable, col::String) =
+    DTableColumn(d, only(indexin([col], string.(_columnnames_svector(d)))))
+DTableColumn(d::DTable, col::Symbol) = DTableColumn(d, string(col))
 
-    row, iter = iterate(Tables.rows(chunk))
-    for _ in 1:(offset-1)
-        row, iter = iterate(Tables.rows(chunk), iter)
-    end
-    Tables.getcolumn(row, dtablecolumn.col)
-end
-
-length(dtablecolumn::DTableColumn) = sum(dtablecolumn.chunk_lengths)
+length(dtc::DTableColumn) = sum(dtc.chunk_lengths)
 
 
-function pull_next_chunk(dtablecolumn::DTableColumn, chunkidx::Int)
-    while dtablecolumn.current_iterator === nothing
-        chunkidx += 1
-        if chunkidx <= length(dtablecolumn.dtable.chunks)
-            dtablecolumn.chunkstore =
-                fetch(Dagger.spawn(__ff, dtablecolumn.dtable.chunks[chunkidx], dtablecolumn.col))
+# function getindex(dtablecolumn::DTableColumn, idx::Int)
+#     chunk_idx = 0
+#     s = 1
+#     for (i, e) in enumerate(dtablecolumn.chunk_lengths)
+#         if s <= idx < s + e
+#             chunk_idx = i
+#             break
+#         end
+#         s = s + e
+#     end
+#     chunk_idx == 0 && throw(BoundsError())
+#     offset = idx - s + 1
+#     chunk = fetch(Dagger.spawn(getcolumn_chunk, dtablecolumn.dtable.chunks[chunk_idx], dtablecolumn.col))
+
+#     row, iter = iterate(Tables.rows(chunk))
+#     for _ in 1:(offset-1)
+#         row, iter = iterate(Tables.rows(chunk), iter)
+#     end
+#     Tables.getcolumn(row, dtablecolumn.col)
+# end
+
+
+function pull_next_chunk(dtc::DTableColumn, c_idx::Int)
+    # find first non-empty chunk
+    while dtc._iter === nothing
+        c_idx += 1
+        if c_idx <= nchunks(dtc.dtable)
+            dtc._chunkstore = fetch(Dagger.spawn(
+                getcolumn_chunk,
+                dtc.dtable.chunks[c_idx],
+                dtc.col
+            ))
         else
-            return chunkidx
+            dtc._chunk = c_idx
+            return nothing
         end
-        dtablecolumn.current_iterator = iterate(dtablecolumn.chunkstore)
+        # iterate in case this chunk is empty
+        dtc._iter = iterate(dtc._chunkstore)
     end
-    return chunkidx
+    dtc._chunk = c_idx
+    return nothing
 end
 
 
-function iterate(dtablecolumn::DTableColumn)
-    if length(dtablecolumn) == 0
-        return nothing
-    end
-    dtablecolumn.chunkstore = nothing
-    dtablecolumn.current_iterator = nothing
-    chunkidx = pull_next_chunk(dtablecolumn, 0)
-    ci = dtablecolumn.current_iterator
-    if ci === nothing
-        return nothing
-    else
-        return (ci[1], (chunkidx, ci[2]))
-    end
+function iterate(dtc::DTableColumn)
+    length(dtc) == 0 && return nothing
+
+    # on every iteration start reset the cache
+    dtc._chunkstore = nothing
+    dtc._iter = nothing
+    dtc._chunk = 0
+
+    # pull the first chunk
+    pull_next_chunk(dtc, 0)
+
+    return dtc._iter
 end
 
-function iterate(dtablecolumn::DTableColumn, iter)
-    (chunkidx, i) = iter
-    cs = dtablecolumn.chunkstore
-    ci = nothing
-    if cs !== nothing
-        ci = iterate(cs, i)
-    else
-        return nothing
-    end
-    dtablecolumn.current_iterator = ci
-    chunkidx = pull_next_chunk(dtablecolumn, chunkidx)
-    ci = dtablecolumn.current_iterator
-    if ci === nothing
-        return nothing
-    else
-        return (ci[1], (chunkidx, ci[2]))
-    end
+function iterate(dtc::DTableColumn, iter)
+    dtc._chunkstore === nothing && return nothing
+    dtc._iter = iterate(dtc._chunkstore, iter)
+    pull_next_chunk(dtc, dtc._chunk)
+    return dtc._iter
 end

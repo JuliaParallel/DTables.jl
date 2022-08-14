@@ -12,6 +12,7 @@ using Distributed
 )
 
 @testset "DTables.jl" begin
-    include("table.jl")
-    include("table_dataframes.jl")
+    # include("table.jl")
+    # include("table_dataframes.jl")
+    include("column.jl")
 end
