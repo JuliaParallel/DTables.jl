@@ -13,12 +13,20 @@ function getcolumn_chunk(chunk_contents, col::Int)
 end
 
 function DTableColumn(d::DTable, col::Int)
-    column_eltype = Tables.schema(Tables.columns(d)).types[col]
-    iterator_type = fetch(Dagger.spawn(
-        (ch, _col) -> typeof(iterate(getcolumn_chunk(ch, _col))),
-        d.chunks[1],
-        col
-    ))
+    schema = Tables.schema(Tables.columns(d))
+
+    column_eltype = schema.types[col]
+
+    iterator_type = Nothing
+    c_idx = 1
+    while iterator_type === Nothing && c_idx <= nchunks(d)
+        iterator_type = fetch(Dagger.spawn(
+            (ch, _col) -> typeof(iterate(getcolumn_chunk(ch, _col))),
+            d.chunks[c_idx],
+            col
+        ))
+        c_idx += 1
+    end
 
     DTableColumn{column_eltype,iterator_type}(
         d,
