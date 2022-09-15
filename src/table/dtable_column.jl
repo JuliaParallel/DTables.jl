@@ -13,9 +13,7 @@ function getcolumn_chunk(chunk_contents, col::Int)
 end
 
 function DTableColumn(d::DTable, col::Int)
-    schema = Tables.schema(Tables.columns(d))
-
-    column_eltype = schema.types[col]
+    column_eltype = Tables.schema(Tables.columns(d)).types[col]
 
     iterator_type = Nothing
     c_idx = 1
@@ -45,28 +43,6 @@ DTableColumn(d::DTable, col::String) =
 DTableColumn(d::DTable, col::Symbol) = DTableColumn(d, string(col))
 
 length(dtc::DTableColumn) = sum(dtc.chunk_lengths)
-
-
-# function getindex(dtablecolumn::DTableColumn, idx::Int)
-#     chunk_idx = 0
-#     s = 1
-#     for (i, e) in enumerate(dtablecolumn.chunk_lengths)
-#         if s <= idx < s + e
-#             chunk_idx = i
-#             break
-#         end
-#         s = s + e
-#     end
-#     chunk_idx == 0 && throw(BoundsError())
-#     offset = idx - s + 1
-#     chunk = fetch(Dagger.spawn(getcolumn_chunk, dtablecolumn.dtable.chunks[chunk_idx], dtablecolumn.col))
-
-#     row, iter = iterate(Tables.rows(chunk))
-#     for _ in 1:(offset-1)
-#         row, iter = iterate(Tables.rows(chunk), iter)
-#     end
-#     Tables.getcolumn(row, dtablecolumn.col)
-# end
 
 
 function pull_next_chunk!(dtc::DTableColumn)
