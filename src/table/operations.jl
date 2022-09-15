@@ -216,7 +216,7 @@ function filter(f, d::DTable)
         m = TableOperations.filter(_f, _chunk)
         Tables.materializer(_chunk)(m)
     end
-    DTable(map(c -> Dagger.spawn(chunk_wrap, c, f), d.chunks), d.tabletype)
+    DTable(map(c -> Dagger.spawn(chunk_wrap, c, f), d.chunks), d.tabletype, d.schema)
 end
 
 

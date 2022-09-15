@@ -21,11 +21,12 @@ mutable struct DTable
     chunks::VTYPE
     tabletype
     schema::Union{Nothing,Tables.Schema}
-    DTable(chunks::VTYPE, tabletype) = new(chunks, tabletype, nothing)
 end
 
-DTable(chunks::Vector{Dagger.EagerThunk}, args...) = DTable(VTYPE(chunks), args...)
-DTable(chunks::Vector{Dagger.Chunk}, args...) = DTable(VTYPE(chunks), args...)
+DTable(chunks::Vector, tabletype) = DTable(VTYPE(chunks), tabletype, nothing)
+DTable(chunks::Vector, tabletype, schema) = DTable(VTYPE(chunks), tabletype, schema)
+
+
 
 """
     DTable(table; tabletype=nothing) -> DTable
