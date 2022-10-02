@@ -64,9 +64,9 @@ function DTable(table, chunksize::Integer; tabletype=nothing)
     chunks = Vector{Dagger.Chunk}()
     type = nothing
     sink = Tables.materializer(tabletype !== nothing ? tabletype() : table)
-    for outer_partition in Tables.partitions(sink(table))
+    for outer_partition in Tables.partitions(table)
         for inner_partition in
-            Tables.partitions(TableOperations.makepartitions(outer_partition, chunksize))
+            Tables.partitions(TableOperations.makepartitions(sink(outer_partition), chunksize))
 
             tpart = sink(inner_partition)
             push!(chunks, Dagger.tochunk(tpart))
