@@ -60,21 +60,72 @@ argument to partition the table (based on row count).
 
 Providing `tabletype` kwarg overrides the internal table partition type.
 """
-function DTable(table, chunksize::Integer; tabletype=nothing)
-    chunks = Vector{Dagger.Chunk}()
+function DTable(table, chunksize::Integer; tabletype=nothing, interpartition_merges=true)
+    chunks = Dagger.Chunk[]
     type = nothing
     sink = Tables.materializer(tabletype !== nothing ? tabletype() : table)
-    for outer_partition in Tables.partitions(table)
-        for inner_partition in
-            Tables.partitions(TableOperations.makepartitions(sink(outer_partition), chunksize))
 
-            tpart = sink(inner_partition)
-            push!(chunks, Dagger.tochunk(tpart))
-            if type === nothing
-                type = typeof(tpart).name.wrapper
+    leftovers = nothing
+    leftovers_length = 0
+
+    for partition in Tables.partitions(table)
+        if leftovers !== nothing
+            inner_partitions =
+                partition |>
+                sink |>
+                TableOperations.makepartitions(chunksize - leftovers_length) |>
+                Tables.partitions
+
+            merged_data =
+                [leftovers, sink(first(inner_partitions))] |>
+                x -> Tables.partitioner(identity, x) |>
+                TableOperations.joinpartitions |>
+                sink
+
+            if length(inner_partitions) == 1
+                leftovers = merged_data
+                leftovers_length = Tables.length(Tables.rows(leftovers))
+                continue
+            else
+                push!(chunks, Dagger.tochunk(merged_data))
+                leftovers = nothing
+                leftovers_length = 0
+                partition =
+                    Iterators.drop(inner_partitions, 1) |>
+                    x -> Tables.partitioner(identity, x) |>
+                    TableOperations.joinpartitions
             end
         end
+
+        inner_partitions =
+            partition |>
+            sink |>
+            TableOperations.makepartitions(chunksize) |>
+            Tables.partitions
+
+        for inner_partition in inner_partitions
+            chunk_data = sink(inner_partition)
+            chunk_data_rows = Tables.rows(chunk_data)
+
+            if (
+                interpartition_merges &&
+                Base.haslength(chunk_data_rows) &&
+                Tables.length(chunk_data_rows) < chunksize
+            )
+                # this is the last chunk with fewer than requested records
+                # merge it with the first of the next partition
+                leftovers = chunk_data
+                leftovers_length = Tables.length(chunk_data_rows)
+            else
+                push!(chunks, Dagger.tochunk(chunk_data))
+            end
+
+            type === nothing && (type = typeof(chunk_data).name.wrapper)
+        end
     end
+
+    leftovers_length > 0 && push!(chunks, Dagger.tochunk(leftovers))
+
     return DTable(chunks, type)
 end
 
