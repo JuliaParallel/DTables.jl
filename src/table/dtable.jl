@@ -44,15 +44,13 @@ function DTable(table; tabletype=nothing)
         tpart = sink(partition)
         push!(chunks, Dagger.tochunk(tpart))
 
-        if type === nothing
-            type = typeof(tpart).name.wrapper
-        end
+        type === nothing && (type = typeof(tpart).name.wrapper)
     end
     return DTable(chunks, type)
 end
 
 """
-    DTable(table, chunksize; tabletype=nothing) -> DTable
+    DTable(table, chunksize; tabletype=nothing, interpartition_merges=true) -> DTable
 
 Constructs a `DTable` using a `Tables.jl` compatible `table` input.
 It assumes no initial partitioning of the table and uses the `chunksize`
@@ -63,13 +61,17 @@ Providing `tabletype` kwarg overrides the internal table partition type.
 function DTable(table, chunksize::Integer; tabletype=nothing, interpartition_merges=true)
     chunks = Dagger.Chunk[]
     type = nothing
-    sink = Tables.materializer(tabletype !== nothing ? tabletype() : table)
+    sink = nothing
 
     leftovers = nothing
     leftovers_length = 0
 
     for partition in Tables.partitions(table)
-        if leftovers !== nothing
+        if sink === nothing
+            sink = Tables.materializer(tabletype !== nothing ? tabletype() : partition)
+        end
+
+        if interpartition_merges && leftovers !== nothing
             inner_partitions =
                 partition |>
                 sink |>
