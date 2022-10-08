@@ -35,7 +35,7 @@ Grouped by: [:a]
 function groupby(d::DTable, col::Symbol; merge=true, chunksize=0)
     rowmap = (_row, _col) -> Tables.getcolumn(_row, _col)
     rowmap_w_cols = _row -> rowmap(_row, col)
-    _groupby(d, rowmap_w_cols, [col], merge, chunksize)
+    return _groupby(d, rowmap_w_cols, [col], merge, chunksize)
 end
 
 """
@@ -69,9 +69,9 @@ Grouped by: [:a, :b]
 ```
 """
 function groupby(d::DTable, cols::Vector{Symbol}; merge=true, chunksize=0)
-    rowmap = (_row, _cols) -> (;[c => Tables.getcolumn(_row, c) for c in _cols]...)
+    rowmap = (_row, _cols) -> (; [c => Tables.getcolumn(_row, c) for c in _cols]...)
     rowmap_w_cols = _row -> rowmap(_row, cols)
-    _groupby(d, rowmap_w_cols, cols, merge, chunksize)
+    return _groupby(d, rowmap_w_cols, cols, merge, chunksize)
 end
 
 """
@@ -117,17 +117,20 @@ Internal function for performing the groupby steps based on common arguments.
 function _groupby(
     d::DTable,
     row_function::Function,
-    cols::Union{Nothing, Vector{Symbol}},
+    cols::Union{Nothing,Vector{Symbol}},
     merge::Bool,
-    chunksize::Int)
-
+    chunksize::Int,
+)
     grouping_function = cols === nothing ? row_function : nothing
 
-    spawner = (_dchunks, _row_function) -> Vector{Dagger.EagerThunk}([Dagger.@spawn distinct_partitions(c, _row_function) for c in _dchunks])
+    spawner =
+        (_dchunks, _row_function) -> Vector{Dagger.EagerThunk}([
+            Dagger.@spawn distinct_partitions(c, _row_function) for c in _dchunks
+        ])
 
     v = Dagger.@spawn spawner(d.chunks, row_function)
     index, chunks = fetch(Dagger.@spawn build_groupby_index(merge, chunksize, tabletype(d), v))
-    GDTable(DTable(chunks, d.tabletype), cols, index, grouping_function)
+    return GDTable(DTable(chunks, d.tabletype), cols, index, grouping_function)
 end
 
 """
@@ -139,12 +142,12 @@ function distinct_partitions(chunk, f::Function)
     rows = Tables.rows(chunk)
     keyval = f(iterate(rows)[1])
 
-    _distinct_partitions_iterate(chunk, f, keyval)
+    return _distinct_partitions_iterate(chunk, f, keyval)
 end
 
-function _distinct_partitions_iterate(chunk, f, keyval::T) where T
+function _distinct_partitions_iterate(chunk, f, keyval::T) where {T}
     rows = Tables.rows(chunk)
-    acc = Dict{T, Vector{eltype(rows)}}()
+    acc = Dict{T,Vector{eltype(rows)}}()
 
     for row in rows
         key = convert(T, f(row))
@@ -152,7 +155,9 @@ function _distinct_partitions_iterate(chunk, f, keyval::T) where T
         push!(v, row)
     end
 
-    Vector{Pair{T, Dagger.Chunk}}([x => Dagger.tochunk(Tables.columntable(acc[x])) for x in collect(keys(acc))])
+    return Vector{Pair{T,Dagger.Chunk}}([
+        x => Dagger.tochunk(Tables.columntable(acc[x])) for x in collect(keys(acc))
+    ])
 end
 
 rowcount(chunk) = length(Tables.rows(chunk))
@@ -166,18 +171,14 @@ It will only merge chunks if their length after merging is `<= chunksize`.
 It doesn't split chunks larger than `chunksize` and small chunks
 may be leftover after merging if no appropriate pair was found.
 """
-function build_groupby_index(
-    merge::Bool,
-    chunksize::Int,
-    tabletype,
-    spawner_out)
+function build_groupby_index(merge::Bool, chunksize::Int, tabletype, spawner_out)
     vs = fetch(spawner_out)
     v1 = fetch(vs[1])
     @assert typeof(v1) <: Vector
     @assert eltype(v1) <: Pair
     keytype = eltype(v1).types[1]
     chunks = Vector{Dagger.Chunk}()
-    idx = Dict{keytype, Vector{UInt}}()
+    idx = Dict{keytype,Vector{UInt}}()
 
     i = one(UInt)
     for v in vs
@@ -195,18 +196,19 @@ function build_groupby_index(
 
     if merge && chunksize <= 0 # merge all partitions into one
         sink = Tables.materializer(tabletype())
-        merged_chunks = Vector{Union{Dagger.EagerThunk, Dagger.Chunk}}()
+        merged_chunks = Vector{Union{Dagger.EagerThunk,Dagger.Chunk}}()
         sizehint!(merged_chunks, length(keys(idx)))
 
-        merge_spawner = (_chunks, _partition, _idx, _sink) -> begin
-            map(k -> begin
-                cs = getindex.(Ref(_chunks), _idx[k])
-                length(cs) == 1 && return cs[1]
-                Dagger.@spawn merge_chunks(_sink, cs)
-            end, _partition)
-        end
+        merge_spawner =
+            (_chunks, _partition, _idx, _sink) -> begin
+                map(k -> begin
+                    cs = getindex.(Ref(_chunks), _idx[k])
+                    length(cs) == 1 && return cs[1]
+                    Dagger.@spawn merge_chunks(_sink, cs)
+                end, _partition)
+            end
         vs = Dagger.@spawn merge_spawner(chunks, collect(keys(idx)), idx, sink)
-        new_idx = Dict{keytype, Vector{UInt}}()
+        new_idx = Dict{keytype,Vector{UInt}}()
         for (i, k) in enumerate(keys(idx))
             new_idx[k] = [i]
         end
@@ -215,7 +217,7 @@ function build_groupby_index(
 
     elseif merge && chunksize > 0 # merge all but try to merge all the small chunks into chunks of chunksize
         sink = Tables.materializer(tabletype())
-        merged_chunks = Vector{Union{Dagger.EagerThunk, Dagger.Chunk}}()
+        merged_chunks = Vector{Union{Dagger.EagerThunk,Dagger.Chunk}}()
 
         all_lengths = [Dagger.@spawn rowcount(c) for c in chunks]
 
@@ -223,7 +225,7 @@ function build_groupby_index(
             _indices = idx[k]
             _lengths = fetch.(getindex.(Ref(all_lengths), _indices))
 
-            ord = sortperm(_lengths, rev=true) # sorting indices and lengths by lengths
+            ord = sortperm(_lengths; rev=true) # sorting indices and lengths by lengths
             _indices .= _indices[ord]
             _lengths .= _lengths[ord]
 
@@ -235,10 +237,9 @@ function build_groupby_index(
                 if _lengths[l] >= chunksize || # chunk already bigger than minimum, so move forward
                     _lengths[l] + _lengths[r] > chunksize || # potential merge would be bigger, so move forward
                     l == r # last iteration to push last chunk and trigger the last merge
-
                     _chunk = chunks[_indices[l]]
                     if r < prev_r # only condition for merging
-                        chunks_to_merge = getindex.(Ref(chunks), _indices[r+1:prev_r])
+                        chunks_to_merge = getindex.(Ref(chunks), _indices[(r + 1):prev_r])
                         _chunk = Dagger.@spawn merge_chunks(sink, [_chunk, chunks_to_merge...])
                         prev_r = r
                     end

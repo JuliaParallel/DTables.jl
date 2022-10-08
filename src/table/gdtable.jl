@@ -10,13 +10,14 @@ grouping and an `index`, which allows to effectively lookup the partitions group
 """
 mutable struct GDTable
     dtable::DTable
-    cols::Union{Vector{Symbol}, Nothing}
+    cols::Union{Vector{Symbol},Nothing}
     index::Dict
-    grouping_function::Union{Function, Nothing}
+    grouping_function::Union{Function,Nothing}
 
     GDTable(dtable, cols, index) = GDTable(dtable, cols, index, nothing)
-    GDTable(dtable, cols, index, grouping_function) =
-        new(dtable, cols, deepcopy(index), grouping_function)
+    function GDTable(dtable, cols, index, grouping_function)
+        return new(dtable, cols, deepcopy(index), grouping_function)
+    end
 end
 
 DTable(gd::GDTable) = DTable(gd.dtable.chunks, gd.dtable.tabletype)
@@ -40,10 +41,11 @@ Returns the keys that `gd` is grouped by.
 keys(gd::GDTable) = keys(gd.index)
 
 partition(gd::GDTable, key) = partition(gd, gd.index[key])
-partition(gd::GDTable, indices::Vector{UInt}) = DTable(VTYPE(getindex.(Ref(gd.dtable.chunks), indices)), gd.dtable.tabletype)
+function partition(gd::GDTable, indices::Vector{UInt})
+    return DTable(VTYPE(getindex.(Ref(gd.dtable.chunks), indices)), gd.dtable.tabletype)
+end
 
 length(gd::GDTable) = length(keys(gd.index))
-
 
 iterate(gd::GDTable) = _iterate(gd, iterate(gd.index))
 iterate(gd::GDTable, index_iter_state) = _iterate(gd, iterate(gd.index, index_iter_state))
@@ -55,7 +57,6 @@ function _iterate(gd::GDTable, it)
     end
     return nothing
 end
-
 
 """
     trim!(gd::GDTable) -> GDTable
@@ -88,9 +89,8 @@ function trim!(gd::GDTable)
             gd.index[key] = ind .- getindex.(Ref(offsets), ind)
         end
     end
-    gd
+    return gd
 end
-
 
 """
     trim(gd::GDTable) -> GDTable
@@ -98,7 +98,6 @@ end
 Returns `gd` with empty chunks and keys removed.
 """
 trim(gd::GDTable) = trim!(GDTable(DTable(gd), gd.cols, gd.index))
-
 
 """
     tabletype!(gd::GDTable)
@@ -109,7 +108,6 @@ In case the tabletype cannot be obtained the default return value is `NamedTuple
 """
 tabletype!(gd::GDTable) = gd.dtable.tabletype = resolve_tabletype(gd.dtable)
 
-
 """
     tabletype(gd::GDTable)
 
@@ -118,19 +116,23 @@ Uses the cached tabletype if available.
 
 In case the tabletype cannot be obtained the default return value is `NamedTuple`.
 """
-tabletype(gd::GDTable) = gd.dtable.tabletype === nothing ? resolve_tabletype(gd.dtable) : gd.dtable.tabletype
-
+function tabletype(gd::GDTable)
+    return gd.dtable.tabletype === nothing ? resolve_tabletype(gd.dtable) : gd.dtable.tabletype
+end
 
 show(io::IO, gd::GDTable) = show(io, MIME"text/plain"(), gd)
 
-
 function show(io::IO, ::MIME"text/plain", gd::GDTable)
-    tabletype = gd.dtable.tabletype === nothing ? "unknown (use `tabletype!(::GDTable)`)" : gd.dtable.tabletype
+    tabletype = if gd.dtable.tabletype === nothing
+        "unknown (use `tabletype!(::GDTable)`)"
+    else
+        gd.dtable.tabletype
+    end
     grouped_by_cols = gd.cols === nothing ? string(gd.grouping_function) : grouped_cols(gd)
     println(io, "GDTable with $(nchunks(gd)) partitions and $(length(gd)) keys")
     println(io, "Tabletype: $tabletype")
     print(io, "Grouped by: $grouped_by_cols")
-    nothing
+    return nothing
 end
 
 """
@@ -141,7 +143,7 @@ Retrieves a `DTable` from `gdt` with rows belonging to the provided grouping key
 function getindex(gdt::GDTable, key)
     ck = convert(keytype(gdt.index), key)
     ck ∉ keys(gdt) && throw(KeyError(ck))
-    partition(gdt, ck)
+    return partition(gdt, ck)
 end
 
 _columnnames_svector(gd::GDTable) = _columnnames_svector(gd.dtable)

@@ -13,8 +13,6 @@ struct DTablePartitionIterator
     d::DTable
 end
 
-
-
 #######################################
 # DTable functions
 
@@ -23,7 +21,6 @@ Tables.rowaccess(table::DTable) = true
 Tables.rows(table::DTable) = DTableRowIterator(table)
 Tables.columnaccess(table::DTable) = true
 Tables.columns(table::DTable) = DTableColumnIterator(table)
-
 
 function determine_schema(table::DTable)
     if table.schema !== nothing
@@ -41,27 +38,22 @@ function determine_schema(table::DTable)
         c_idx += 1
     end
     # cache results
-    table.schema = r[2]
+    return table.schema = r[2]
 end
-
 
 function determine_columnnames(table::DTable)
     s = determine_schema(table)
-    s === nothing ? nothing : s.names
+    return s === nothing ? nothing : s.names
 end
 
-
-function _getcolumn(table::DTable, col::Union{Symbol, Int})
+function _getcolumn(table::DTable, col::Union{Symbol,Int})
     chunk_col = (_chunk, _col) -> Tables.getcolumn(_chunk, _col)
     v = [Dagger.spawn(chunk_col, chunk, col) for chunk in table.chunks]
-    SentinelArrays.ChainedVector(fetch.(v))
+    return SentinelArrays.ChainedVector(fetch.(v))
 end
-
 
 Tables.getcolumn(table::DTable, col::Symbol) = _getcolumn(table, col)
 Tables.getcolumn(table::DTable, idx::Int) = _getcolumn(table, idx)
-
-
 
 #######################################
 # DTableRowIterator functions
@@ -100,8 +92,6 @@ function Base.iterate(iter::DTableRowIterator, state)
     end
 end
 
-
-
 #######################################
 # DTableColumnIterator functions
 
@@ -123,8 +113,6 @@ end
 Base.iterate(table::DTableColumnIterator) = _iterate(table, 1)
 Base.iterate(table::DTableColumnIterator, state) = _iterate(table, state)
 
-
-
 #######################################
 # DTablePartitionIterator functions
 
@@ -133,13 +121,11 @@ length(table::DTablePartitionIterator) = nchunks(table.d)
 
 function _iterate(table::DTablePartitionIterator, chunk_index)
     nchunks(table.d) < chunk_index && return nothing
-    (_retrieve(table.d.chunks[chunk_index]), chunk_index + 1)
+    return (_retrieve(table.d.chunks[chunk_index]), chunk_index + 1)
 end
 
 Base.iterate(table::DTablePartitionIterator) = _iterate(table, 1)
 Base.iterate(table::DTablePartitionIterator, state) = _iterate(table, state)
-
-
 
 #######################################
 # GDTable
@@ -176,4 +162,6 @@ function _iterate(table::GDTablePartitionIterator, it)
 end
 
 iterate(table::GDTablePartitionIterator) = _iterate(table, iterate(table.d))
-iterate(table::GDTablePartitionIterator, index_iter_state) = _iterate(table, iterate(table.d, index_iter_state))
+function iterate(table::GDTablePartitionIterator, index_iter_state)
+    return _iterate(table, iterate(table.d, index_iter_state))
+end
