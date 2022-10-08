@@ -11,7 +11,7 @@ function select_rowfunction(row, mappable_part_of_normalized_cs, colresults)
                         [
                             k => Tables.getcolumn(row, k) for
                             k in getindex.(Ref(Tables.columnnames(row)), colidx.cols)
-                        ]...,
+                        ]...
                     )
                 else
                     Tables.getcolumn.(Ref(row), colidx)
