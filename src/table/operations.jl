@@ -35,9 +35,8 @@ function map(f, d::DTable)
         end
     end
     chunks = map(c -> Dagger.spawn(chunk_wrap, c, f), d.chunks)
-    DTable(chunks, d.tabletype)
+    return DTable(chunks, d.tabletype)
 end
-
 
 """
     map(f, gd::GDTable) -> GDTable
@@ -63,7 +62,7 @@ julia> fetch(m)
 """
 function map(f, gd::GDTable)
     d = map(f, gd.dtable)
-    GDTable(d, gd.cols, gd.index)
+    return GDTable(d, gd.cols, gd.index)
 end
 
 """
@@ -95,46 +94,60 @@ julia> fetch(r2)
 (a = 6,)
 ```
 """
-function reduce(f, d::DTable; cols=nothing::Union{Nothing, Vector{Symbol}}, init=Base._InitialValue())
+function reduce(
+    f, d::DTable; cols=nothing::Union{Nothing,Vector{Symbol}}, init=Base._InitialValue()
+)
     # handle empty dtables
     nchunks(d) == 0 && return Dagger.@spawn NamedTuple()
 
     columns = cols === nothing ? _columnnames_svector(d) : cols
 
-    chunk_reduce_results = _reduce_chunks(f, d.chunks, columns, init=init)
+    chunk_reduce_results = _reduce_chunks(f, d.chunks, columns; init=init)
 
     construct_single_column = (_col, _chunk_results) -> getindex.(fetch.(_chunk_results), _col)
-    result_columns = [Dagger.@spawn construct_single_column(c, chunk_reduce_results) for c in columns]
+    result_columns = [
+        Dagger.@spawn construct_single_column(c, chunk_reduce_results) for c in columns
+    ]
 
     reduce_result_column = (_f, _c, _init) -> reduce(_f, _c; init=_init)
-    reduce_chunks = [Dagger.@spawn reduce_result_column(f, c, deepcopy(init)) for c in result_columns]
+    reduce_chunks = [
+        Dagger.@spawn reduce_result_column(f, c, deepcopy(init)) for c in result_columns
+    ]
 
     construct_result = (_cols, _vals) -> (; zip(_cols, fetch.(_vals))...)
     Dagger.@spawn construct_result(columns, reduce_chunks)
 end
 
+function _reduce_chunks(
+    f,
+    chunks::Vector{Union{Dagger.EagerThunk,Dagger.Chunk}},
+    columns::Vector{Symbol};
+    init=Base._InitialValue(),
+)
+    col_in_chunk_reduce =
+        (_f, _c, _init, _chunk) -> reduce(_f, Tables.getcolumn(_chunk, _c); init=_init)
 
-function _reduce_chunks(f, chunks::Vector{Union{Dagger.EagerThunk, Dagger.Chunk}}, columns::Vector{Symbol}; init=Base._InitialValue())
-    col_in_chunk_reduce = (_f, _c, _init, _chunk) -> reduce(_f, Tables.getcolumn(_chunk, _c); init=_init)
+    chunk_reduce =
+        (_f, _chunk, _cols, _init) -> begin
+            # TODO: potential speedup enabled by commented code below by reducing the columns in parallel
+            v = [col_in_chunk_reduce(_f, c, deepcopy(_init), _chunk) for c in _cols]
+            (; zip(_cols, v)...)
 
-    chunk_reduce = (_f, _chunk, _cols, _init) -> begin
-        # TODO: potential speedup enabled by commented code below by reducing the columns in parallel
-        v = [col_in_chunk_reduce(_f, c, deepcopy(_init), _chunk) for c in _cols]
-        (; zip(_cols, v)...)
-
-        # TODO: uncomment and define a good threshold for parallelization when this get's resolved
-        # https://github.com/JuliaParallel/Dagger.jl/issues/267
-        # This piece of code (else option) below is causing the issue above
-        # when reduce is repeatedly executed or @btime is used.
-        # if length(_cols) <= 1
-        #     v = [col_in_chunk_reduce(_f, c, _init, _chunk) for c in _cols]
-        # else
-        #     values = [Dagger.spawn(col_in_chunk_reduce, _f, c, _init, _chunk) for c in _cols]
-        #     v = fetch.(values)
-        # end
-        # (; zip(_cols, v)...)
-    end
-    chunk_reduce_spawner = (_d, _f, _columns, _init) -> [Dagger.@spawn chunk_reduce(_f, c, _columns, _init) for c in _d]
+            # TODO: uncomment and define a good threshold for parallelization when this get's resolved
+            # https://github.com/JuliaParallel/Dagger.jl/issues/267
+            # This piece of code (else option) below is causing the issue above
+            # when reduce is repeatedly executed or @btime is used.
+            # if length(_cols) <= 1
+            #     v = [col_in_chunk_reduce(_f, c, _init, _chunk) for c in _cols]
+            # else
+            #     values = [Dagger.spawn(col_in_chunk_reduce, _f, c, _init, _chunk) for c in _cols]
+            #     v = fetch.(values)
+            # end
+            # (; zip(_cols, v)...)
+        end
+    chunk_reduce_spawner =
+        (_d, _f, _columns, _init) ->
+            [Dagger.@spawn chunk_reduce(_f, c, _columns, _init) for c in _d]
     Dagger.@spawn chunk_reduce_spawner(chunks, f, columns, init)
 end
 
@@ -159,29 +172,40 @@ julia> fetch(reduce(*, g))
 function reduce(
     f,
     gd::GDTable;
-    cols=nothing::Union{Nothing, Vector{Symbol}},
+    cols=nothing::Union{Nothing,Vector{Symbol}},
     prefix::String="result_",
-    init=Base._InitialValue())
+    init=Base._InitialValue(),
+)
 
     # handle empty dtables
     nchunks(gd) == 0 && return Dagger.@spawn NamedTuple()
 
     columns = cols === nothing ? _columnnames_svector(gd) : cols
 
-    chunk_reduce_results = _reduce_chunks(f, gd.dtable.chunks, columns, init=init)
+    chunk_reduce_results = _reduce_chunks(f, gd.dtable.chunks, columns; init=init)
 
     reduce_result_column = (_f, _c, _init) -> reduce(_f, _c; init=deepcopy(_init))
-    construct_single_column = (_col, _chunk_results, _index, _f, _init) -> begin
-        r = getindex.(fetch.(_chunk_results), _col)
-        [reduce_result_column(_f, getindex.(Ref(r), chunk_indices), _init) for (_, chunk_indices) in _index]
-    end
-    result_columns = [Dagger.@spawn construct_single_column(c, chunk_reduce_results, gd.index, f, init) for c in columns]
+    construct_single_column =
+        (_col, _chunk_results, _index, _f, _init) -> begin
+            r = getindex.(fetch.(_chunk_results), _col)
+            [
+                reduce_result_column(_f, getindex.(Ref(r), chunk_indices), _init) for
+                (_, chunk_indices) in _index
+            ]
+        end
+    result_columns = [
+        Dagger.@spawn construct_single_column(c, chunk_reduce_results, gd.index, f, init) for
+        c in columns
+    ]
 
-    construct_result = (_keys, _gcols, _columns, _results, _prefix) -> begin
-        ks = [col => getindex.(_keys, i) for (i, col) in enumerate(_gcols)]
-        rs = [Symbol(_prefix * string(r)) => fetch(_results[i]) for (i, r) in enumerate(_columns)]
-        (; ks..., rs...)
-    end
+    construct_result =
+        (_keys, _gcols, _columns, _results, _prefix) -> begin
+            ks = [col => getindex.(_keys, i) for (i, col) in enumerate(_gcols)]
+            rs = [
+                Symbol(_prefix * string(r)) => fetch(_results[i]) for (i, r) in enumerate(_columns)
+            ]
+            (; ks..., rs...)
+        end
 
     Dagger.@spawn construct_result(keys(gd), grouped_cols(gd), columns, result_columns, prefix)
 end
@@ -216,9 +240,8 @@ function filter(f, d::DTable)
         m = TableOperations.filter(_f, _chunk)
         Tables.materializer(_chunk)(m)
     end
-    DTable(map(c -> Dagger.spawn(chunk_wrap, c, f), d.chunks), d.tabletype, d.schema)
+    return DTable(map(c -> Dagger.spawn(chunk_wrap, c, f), d.chunks), d.tabletype, d.schema)
 end
-
 
 """
     filter(f, gd::GDTable) -> GDTable
@@ -249,9 +272,8 @@ Grouped by: [:a]
 """
 function filter(f, gd::GDTable)
     d = filter(f, gd.dtable)
-    GDTable(d, gd.cols, gd.index)
+    return GDTable(d, gd.cols, gd.index)
 end
-
 
 """
     mapreduce(f, op, d::DTable; init=Base._InitialValue())
@@ -267,18 +289,20 @@ julia> fetch(Dagger.mapreduce(sum, fit!, d1, init = Mean()))
 Mean: n=100 | value=1.50573
 """
 
-
 function mapreduce(f, op, d::DTable; init=Base._InitialValue())
     nchunks(d) == 0 && return Dagger.@spawn NamedTuple()
-    chunk_reduce_results = _mapreduce_rows_in_chunks(f, op, d.chunks, init=init)
+    chunk_reduce_results = _mapreduce_rows_in_chunks(f, op, d.chunks; init=init)
 
     reduce_result_column = (_f, _c, _init) -> reduce(_f, fetch.(_c); init=deepcopy(_init))
     Dagger.@spawn reduce_result_column(op, chunk_reduce_results, deepcopy(init))
 end
 
-
-function _mapreduce_rows_in_chunks(fmap, f, chunks::Vector{Union{Dagger.EagerThunk,Dagger.Chunk}}; init=Base._InitialValue())
-    col_in_chunk_reduce = (_f, _init, _chunk) -> reduce(_f, TableOperations.map(fmap, _chunk); init=deepcopy(_init))
-    chunk_reduce_spawner = (_d, _f, _init) -> [Dagger.@spawn col_in_chunk_reduce(_f, _init, c) for c in _d]
+function _mapreduce_rows_in_chunks(
+    fmap, f, chunks::Vector{Union{Dagger.EagerThunk,Dagger.Chunk}}; init=Base._InitialValue()
+)
+    col_in_chunk_reduce =
+        (_f, _init, _chunk) -> reduce(_f, TableOperations.map(fmap, _chunk); init=deepcopy(_init))
+    chunk_reduce_spawner =
+        (_d, _f, _init) -> [Dagger.@spawn col_in_chunk_reduce(_f, _init, c) for c in _d]
     Dagger.@spawn chunk_reduce_spawner(chunks, f, init)
 end

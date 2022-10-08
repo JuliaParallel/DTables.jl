@@ -3,13 +3,7 @@ import DataAPI: leftjoin, innerjoin
 # A set of kwargs that can be provided by the user.
 # Used for deciding whether to use the `DTables` join implementation directly
 # or to attempt using an external join function.
-const JOINKWARGS = Set([
-    :l_sorted,
-    :r_sorted,
-    :r_unique,
-    :lookup,
-])
-
+const JOINKWARGS = Set([:l_sorted, :r_sorted, :r_unique, :lookup])
 
 """
     leftjoin(d1::DTable, d2; on=nothing, l_sorted=false, r_sorted=false, r_unique=false, lookup=nothing)
@@ -33,20 +27,19 @@ and a `d2` of `DataFrame` type.
 function leftjoin(d1::DTable, d2; kwargs...)
     f = (l, r, ks) -> _leftjoinwrapper(l, r; ks...)
     v = [Dagger.@spawn f(c, d2, kwargs) for c in d1.chunks]
-    DTable(v, d1.tabletype)
+    return DTable(v, d1.tabletype)
 end
 
 function leftjoin(d1::DTable, d2::DTable; kwargs...)
     f = (l, r, ks) -> _join(:leftjoin, l, r; ks...)
     v = [Dagger.@spawn f(c, d2, kwargs) for c in d1.chunks]
-    DTable(v, d1.tabletype)
+    return DTable(v, d1.tabletype)
 end
 
 function leftjoin(d1::GDTable, d2; kwargs...)
     d = leftjoin(d1.dtable, d2; kwargs...)
-    GDTable(d, d1.cols, d1.index)
+    return GDTable(d, d1.cols, d1.index)
 end
-
 
 function _leftjoinwrapper(l, r; kwargs...)
     if !any(k in JOINKWARGS for k in keys(kwargs)) && use_dataframe_join(typeof(l), typeof(r))
@@ -55,7 +48,6 @@ function _leftjoinwrapper(l, r; kwargs...)
         _join(:leftjoin, l, r; kwargs...)
     end
 end
-
 
 """
     innerjoin(d1::DTable, d2; on=nothing, l_sorted=false, r_sorted=false, r_unique=false, lookup=nothing)
@@ -79,18 +71,18 @@ and a `d2` of `DataFrame` type.
 function innerjoin(d1::DTable, d2; kwargs...)
     f = (l, r, ks) -> _innerjoinwrapper(l, r; ks...)
     v = [Dagger.@spawn f(c, d2, kwargs) for c in d1.chunks]
-    DTable(v, d1.tabletype)
+    return DTable(v, d1.tabletype)
 end
 
 function innerjoin(d1::DTable, d2::DTable; kwargs...)
     f = (l, r, ks) -> _join(:innerjoin, l, r; ks...)
     v = [Dagger.@spawn f(c, d2, kwargs) for c in d1.chunks]
-    DTable(v, d1.tabletype)
+    return DTable(v, d1.tabletype)
 end
 
 function innerjoin(d1::GDTable, d2; kwargs...)
     d = innerjoin(d1.dtable, d2; kwargs...)
-    GDTable(d, d1.cols, d1.index)
+    return GDTable(d, d1.cols, d1.index)
 end
 
 function _innerjoinwrapper(l, r; kwargs...)
@@ -100,7 +92,6 @@ function _innerjoinwrapper(l, r; kwargs...)
         _join(:innerjoin, l, r; kwargs...)
     end
 end
-
 
 """
     match_inner_indices(l, r, cmp_l, cmp_r, lookup, r_sorted, l_sorted, r_unique)
@@ -129,24 +120,24 @@ Low level join method for `DTable` joins using the generic implementation.
 It joins an `l_chunk` with `r` assuming `r` is a continuous table.
 """
 function _join(
-        type::Symbol,
-        l_chunk,
-        r;
-        on=nothing,
-        l_sorted=false,
-        r_sorted=false,
-        r_unique=false,
-        lookup=nothing
-    )
-
+    type::Symbol,
+    l_chunk,
+    r;
+    on=nothing,
+    l_sorted=false,
+    r_sorted=false,
+    r_unique=false,
+    lookup=nothing,
+)
     names, _, other_r, cmp_l, cmp_r = resolve_colnames(l_chunk, r, on)
 
-    inner_l, inner_r = match_inner_indices(l_chunk, r, cmp_l, cmp_r, lookup, r_sorted, l_sorted, r_unique)
+    inner_l, inner_r = match_inner_indices(
+        l_chunk, r, cmp_l, cmp_r, lookup, r_sorted, l_sorted, r_unique
+    )
 
     outer_l = type == :innerjoin ? Set{UInt}() : find_outer_indices(l_chunk, inner_l)
-    build_joined_table(type, names, l_chunk, r, inner_l, inner_r, outer_l, other_r)
+    return build_joined_table(type, names, l_chunk, r, inner_l, inner_r, outer_l, other_r)
 end
-
 
 """
     _join(type::Symbol, l_chunk, r::DTable; kwargs...)
@@ -156,26 +147,34 @@ It joins an `l_chunk` with `r` assuming `r` is a `DTable`.
 In this case the join is split into multiple joins of `l_chunk` with each chunk of `r` and a final merge operation.
 """
 function _join(
-        type::Symbol,
-        l_chunk,
-        r::DTable;
-        on=nothing,
-        l_sorted=false,
-        r_sorted=false,
-        r_unique=false,
-        lookup=nothing
-    )
-
+    type::Symbol,
+    l_chunk,
+    r::DTable;
+    on=nothing,
+    l_sorted=false,
+    r_sorted=false,
+    r_unique=false,
+    lookup=nothing,
+)
     names, _, other_r, cmp_l, cmp_r = resolve_colnames(l_chunk, r, on)
 
-    process_one_chunk = (type, l, r, cmp_l, cmp_r, other_r, lookup, r_sorted, l_sorted, r_unique) -> begin
-        inner_l, inner_r = match_inner_indices(l, r, cmp_l, cmp_r, lookup, r_sorted, l_sorted, r_unique)
-        inner_chunk = Dagger.tochunk(build_joined_table(type, names, l, r, inner_l, inner_r, Set{UInt}(), other_r))
-        outer_l = type == :innerjoin ? Set{UInt}() : find_outer_indices(l, inner_l)
-        return inner_chunk, outer_l
-    end
+    process_one_chunk =
+        (type, l, r, cmp_l, cmp_r, other_r, lookup, r_sorted, l_sorted, r_unique) -> begin
+            inner_l, inner_r = match_inner_indices(
+                l, r, cmp_l, cmp_r, lookup, r_sorted, l_sorted, r_unique
+            )
+            inner_chunk = Dagger.tochunk(
+                build_joined_table(type, names, l, r, inner_l, inner_r, Set{UInt}(), other_r)
+            )
+            outer_l = type == :innerjoin ? Set{UInt}() : find_outer_indices(l, inner_l)
+            return inner_chunk, outer_l
+        end
 
-    vs = [Dagger.@spawn process_one_chunk(type, l_chunk, chunk, cmp_l, cmp_r, other_r, lookup, r_sorted, l_sorted, r_unique) for chunk in r.chunks]
+    vs = [
+        Dagger.@spawn process_one_chunk(
+            type, l_chunk, chunk, cmp_l, cmp_r, other_r, lookup, r_sorted, l_sorted, r_unique
+        ) for chunk in r.chunks
+    ]
 
     to_merge = Vector{Dagger.Chunk}()
     sizehint!(to_merge, length(r.chunks))
@@ -186,11 +185,13 @@ function _join(
     if type == :leftjoin
         outer_l = intersect(getindex.(v, 2)...)
         inner_l = inner_r = Vector{UInt}()
-        outer = Dagger.tochunk(build_joined_table(type, names, l_chunk, r, inner_l, inner_r, outer_l, other_r))
+        outer = Dagger.tochunk(
+            build_joined_table(type, names, l_chunk, r, inner_l, inner_r, outer_l, other_r)
+        )
         push!(to_merge, outer)
     end
 
-    merge_chunks(Tables.materializer(l_chunk), to_merge)
+    return merge_chunks(Tables.materializer(l_chunk), to_merge)
 end
 
 """
@@ -201,5 +202,5 @@ Remove this function and it's usage once a generic Tables.jl compatible join fun
 Porting the Dagger join functions to TableOperations is an option to achieve that.
 """
 function use_dataframe_join(d1type, d2type)
-    :DataFrame == d1type.name.name == d2type.name.name
+    return :DataFrame == d1type.name.name == d2type.name.name
 end

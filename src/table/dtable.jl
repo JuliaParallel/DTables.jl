@@ -26,8 +26,6 @@ end
 DTable(chunks::Vector, tabletype) = DTable(VTYPE(chunks), tabletype, nothing)
 DTable(chunks::Vector, tabletype, schema) = DTable(VTYPE(chunks), tabletype, schema)
 
-
-
 """
     DTable(table; tabletype=nothing) -> DTable
 
@@ -53,7 +51,6 @@ function DTable(table; tabletype=nothing)
     return DTable(chunks, type)
 end
 
-
 """
     DTable(table, chunksize; tabletype=nothing) -> DTable
 
@@ -68,7 +65,8 @@ function DTable(table, chunksize::Integer; tabletype=nothing)
     type = nothing
     sink = Tables.materializer(tabletype !== nothing ? tabletype() : table)
     for outer_partition in Tables.partitions(table)
-        for inner_partition in Tables.partitions(TableOperations.makepartitions(outer_partition, chunksize))
+        for inner_partition in
+            Tables.partitions(TableOperations.makepartitions(outer_partition, chunksize))
             tpart = sink(inner_partition)
             push!(chunks, Dagger.tochunk(tpart))
             if type === nothing
@@ -114,7 +112,7 @@ Fetching an empty DTable results in returning an empty `NamedTuple` regardless o
 """
 function fetch(d::DTable)
     sink = Tables.materializer(tabletype(d)())
-    sink(_retrieve_partitions(d))
+    return sink(_retrieve_partitions(d))
 end
 
 """
@@ -127,8 +125,11 @@ fetch(d::DTable, sink) = sink(_retrieve_partitions(d))
 
 function _retrieve_partitions(d::DTable)
     d2 = trim(d)
-    return nchunks(d2) > 0 ?
-        TableOperations.joinpartitions(Tables.partitioner(_retrieve, d2.chunks)) : NamedTuple()
+    return if nchunks(d2) > 0
+        TableOperations.joinpartitions(Tables.partitioner(_retrieve, d2.chunks))
+    else
+        NamedTuple()
+    end
 end
 
 _retrieve(x::Dagger.EagerThunk) = fetch(x)
@@ -163,11 +164,11 @@ function resolve_tabletype(d::DTable)
             t !== nothing && break
         end
     end
-    t !== nothing ? t : NamedTuple
+    return t !== nothing ? t : NamedTuple
 end
 
 function isnonempty(chunk)
-    length(Tables.rows(chunk)) > 0 && length(Tables.columnnames(chunk)) > 0
+    return length(Tables.rows(chunk)) > 0 && length(Tables.columnnames(chunk)) > 0
 end
 
 """
@@ -178,7 +179,7 @@ Removes empty chunks from `d`.
 function trim!(d::DTable)
     check_result = [Dagger.@spawn isnonempty(c) for c in d.chunks]
     d.chunks = getindex.(filter(x -> fetch(check_result[x[1]]), collect(enumerate(d.chunks))), 2)
-    d
+    return d
 end
 
 """
@@ -194,26 +195,28 @@ function show(io::IO, ::MIME"text/plain", d::DTable)
     tabletype = d.tabletype === nothing ? "unknown (use `tabletype!(::DTable)`)" : d.tabletype
     println(io, "DTable with $(nchunks(d)) partitions")
     print(io, "Tabletype: $tabletype")
-    nothing
+    return nothing
 end
 
 function chunk_lengths(table::DTable)
     f = x -> length(Tables.rows(x))
-    fetch.([Dagger.@spawn f(c) for c in table.chunks])
+    return fetch.([Dagger.@spawn f(c) for c in table.chunks])
 end
 
 function length(table::DTable)
-    sum(chunk_lengths(table))
+    return sum(chunk_lengths(table))
 end
 
 function _columnnames_svector(d::DTable)
     colnames_tuple = determine_columnnames(d)
-    colnames_tuple !== nothing ? [sym for sym in colnames_tuple] : nothing
+    return colnames_tuple !== nothing ? [sym for sym in colnames_tuple] : nothing
 end
 
 @inline nchunks(d::DTable) = length(d.chunks)
 
-merge_chunks(sink, chunks) = sink(TableOperations.joinpartitions(Tables.partitioner(_retrieve, chunks)))
+function merge_chunks(sink, chunks)
+    return sink(TableOperations.joinpartitions(Tables.partitioner(_retrieve, chunks)))
+end
 
 Base.names(dt::DTable) = string.(_columnnames_svector(dt))
 Base.propertynames(dt::DTable) = _columnnames_svector(dt)
@@ -225,4 +228,6 @@ function Base.wait(dt::DTable)
     return nothing
 end
 
-Base.isready(dt::DTable) = all([ch isa Dagger.Chunk ? true : (isready(ch); true) for ch in dt.chunks])
+function Base.isready(dt::DTable)
+    return all([ch isa Dagger.Chunk ? true : (isready(ch); true) for ch in dt.chunks])
+end

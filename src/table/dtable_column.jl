@@ -18,43 +18,34 @@ function DTableColumn(d::DTable, col::Int)
     iterator_type = Nothing
     c_idx = 1
     while iterator_type === Nothing && c_idx <= nchunks(d)
-        iterator_type = fetch(Dagger.spawn(
-            (ch, _col) -> typeof(iterate(getcolumn_chunk(ch, _col))),
-            d.chunks[c_idx],
-            col
-        ))
+        iterator_type = fetch(
+            Dagger.spawn(
+                (ch, _col) -> typeof(iterate(getcolumn_chunk(ch, _col))), d.chunks[c_idx], col
+            ),
+        )
         c_idx += 1
     end
 
-    DTableColumn{column_eltype,iterator_type}(
-        d,
-        col,
-        _columnnames_svector(d)[col],
-        chunk_lengths(d),
-        0,
-        nothing,
-        nothing,
+    return DTableColumn{column_eltype,iterator_type}(
+        d, col, _columnnames_svector(d)[col], chunk_lengths(d), 0, nothing, nothing
     )
 end
 
-
-DTableColumn(d::DTable, col::String) =
-    DTableColumn(d, only(indexin([col], string.(_columnnames_svector(d)))))
+function DTableColumn(d::DTable, col::String)
+    return DTableColumn(d, only(indexin([col], string.(_columnnames_svector(d)))))
+end
 DTableColumn(d::DTable, col::Symbol) = DTableColumn(d, string(col))
 
 length(dtc::DTableColumn) = sum(dtc.chunk_lengths)
-
 
 function pull_next_chunk!(dtc::DTableColumn)
     # find first non-empty chunk
     while dtc._iter === nothing
         dtc._chunk += 1
         if dtc._chunk <= nchunks(dtc.dtable)
-            dtc._chunkstore = fetch(Dagger.spawn(
-                getcolumn_chunk,
-                dtc.dtable.chunks[dtc._chunk],
-                dtc.col
-            ))
+            dtc._chunkstore = fetch(
+                Dagger.spawn(getcolumn_chunk, dtc.dtable.chunks[dtc._chunk], dtc.col)
+            )
         else
             return nothing
         end
@@ -63,7 +54,6 @@ function pull_next_chunk!(dtc::DTableColumn)
     end
     return nothing
 end
-
 
 function iterate(dtc::DTableColumn)
     length(dtc) == 0 && return nothing

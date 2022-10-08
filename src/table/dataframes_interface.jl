@@ -2,10 +2,9 @@ import DataAPI: All, Between, BroadcastedSelector, Cols
 import DataFrames: AsTable, ByRow, ColumnIndex, MultiColumnIndex, normalize_selection
 import InvertedIndices: BroadcastedInvertedIndex
 
-
-
-make_pair_concrete(@nospecialize(x::Pair)) =
-    make_pair_concrete(x.first) => make_pair_concrete(x.second)
+function make_pair_concrete(@nospecialize(x::Pair))
+    return make_pair_concrete(x.first) => make_pair_concrete(x.second)
+end
 make_pair_concrete(@nospecialize(x)) = x
 
 broadcast_pair(df::DTable, @nospecialize(p::Any)) = p
@@ -13,14 +12,11 @@ broadcast_pair(df::DTable, @nospecialize(p::Any)) = p
 # Copied as is from DataFrames.jl
 function broadcast_pair(df::DTable, @nospecialize(p::Pair))
     src, second = p
-    src_broadcast = src isa Union{BroadcastedInvertedIndex,
-        BroadcastedSelector}
-    second_broadcast = second isa Union{BroadcastedInvertedIndex,
-        BroadcastedSelector}
+    src_broadcast = src isa Union{BroadcastedInvertedIndex,BroadcastedSelector}
+    second_broadcast = second isa Union{BroadcastedInvertedIndex,BroadcastedSelector}
     if second isa Pair
         fun, dst = second
-        dst_broadcast = dst isa Union{BroadcastedInvertedIndex,
-            BroadcastedSelector}
+        dst_broadcast = dst isa Union{BroadcastedInvertedIndex,BroadcastedSelector}
         if src_broadcast || dst_broadcast
             new_src = src_broadcast ? names(df, src.sel) : src
             new_dst = dst_broadcast ? names(df, dst.sel) : dst
@@ -45,7 +41,6 @@ end
 # as then broadcasting produces Matrix{Any} rather than Matrix{<:Pair}
 broadcast_pair(df::DTable, @nospecialize(p::AbstractMatrix)) = isempty(p) ? [] : p
 
-
 # Copied as is from DataFrames.jl
 function broadcast_pair(df::DTable, @nospecialize(p::AbstractVecOrMat{<:Pair}))
     isempty(p) && return []
@@ -53,17 +48,22 @@ function broadcast_pair(df::DTable, @nospecialize(p::AbstractVecOrMat{<:Pair}))
 
     src = first.(p)
     first_src = first(src)
-    if first_src isa Union{BroadcastedInvertedIndex,
-        BroadcastedSelector}
+    if first_src isa Union{BroadcastedInvertedIndex,BroadcastedSelector}
         if any(!=(first_src), src)
-            throw(ArgumentError("when broadcasting column selector it must " *
-                                "have a constant value"))
+            throw(
+                ArgumentError(
+                    "when broadcasting column selector it must " * "have a constant value"
+                ),
+            )
         end
         need_broadcast = true
         new_names = names(df, first_src.sel)
         if !(length(new_names) == size(p, 1) || size(p, 1) == 1)
-            throw(ArgumentError("broadcasted dimension does not match the " *
-                                "number of selected columns"))
+            throw(
+                ArgumentError(
+                    "broadcasted dimension does not match the " * "number of selected columns"
+                ),
+            )
         end
         new_src = new_names
     else
@@ -72,33 +72,45 @@ function broadcast_pair(df::DTable, @nospecialize(p::AbstractVecOrMat{<:Pair}))
 
     second = last.(p)
     first_second = first(second)
-    if first_second isa Union{BroadcastedInvertedIndex,
-        BroadcastedSelector}
+    if first_second isa Union{BroadcastedInvertedIndex,BroadcastedSelector}
         if any(!=(first_second), second)
-            throw(ArgumentError("when using broadcasted column selector it " *
-                                "must have a constant value"))
+            throw(
+                ArgumentError(
+                    "when using broadcasted column selector it " * "must have a constant value"
+                ),
+            )
         end
         need_broadcast = true
         new_names = names(df, first_second.sel)
         if !(length(new_names) == size(p, 1) || size(p, 1) == 1)
-            throw(ArgumentError("broadcasted dimension does not match the " *
-                                "number of selected columns"))
+            throw(
+                ArgumentError(
+                    "broadcasted dimension does not match the " * "number of selected columns"
+                ),
+            )
         end
         new_second = new_names
     else
         if first_second isa Pair
             fun, dst = first_second
-            if dst isa Union{BroadcastedInvertedIndex,
-                BroadcastedSelector}
+            if dst isa Union{BroadcastedInvertedIndex,BroadcastedSelector}
                 if !all(x -> x isa Pair && last(x) == dst, second)
-                    throw(ArgumentError("when using broadcasted column selector " *
-                                        "it must have a constant value"))
+                    throw(
+                        ArgumentError(
+                            "when using broadcasted column selector " *
+                            "it must have a constant value",
+                        ),
+                    )
                 end
                 need_broadcast = true
                 new_names = names(df, dst.sel)
                 if !(length(new_names) == size(p, 1) || size(p, 1) == 1)
-                    throw(ArgumentError("broadcasted dimension does not match the " *
-                                        "number of selected columns"))
+                    throw(
+                        ArgumentError(
+                            "broadcasted dimension does not match the " *
+                            "number of selected columns",
+                        ),
+                    )
                 end
                 new_dst = new_names
                 new_second = first.(second) .=> new_dst
@@ -119,7 +131,9 @@ function broadcast_pair(df::DTable, @nospecialize(p::AbstractVecOrMat{<:Pair}))
 end
 
 # Copied as is from DataFrames.jl
-function manipulate(df::DTable, @nospecialize(cs...); copycols::Bool, keeprows::Bool, renamecols::Bool)
+function manipulate(
+    df::DTable, @nospecialize(cs...); copycols::Bool, keeprows::Bool, renamecols::Bool
+)
     cs_vec = []
     for v in cs
         if v isa AbstractVecOrMat{<:Pair}
@@ -128,8 +142,12 @@ function manipulate(df::DTable, @nospecialize(cs...); copycols::Bool, keeprows::
             push!(cs_vec, v)
         end
     end
-    return _manipulate(df, Any[normalize_selection(index(df), make_pair_concrete(c), renamecols) for c in cs_vec],
-        copycols, keeprows)
+    return _manipulate(
+        df,
+        Any[normalize_selection(index(df), make_pair_concrete(c), renamecols) for c in cs_vec],
+        copycols,
+        keeprows,
+    )
 end
 
 # Not copied - full custom implementation
@@ -156,13 +174,12 @@ function _manipulate(df::DTable, normalized_cs::Vector{Any}, copycols::Bool, kee
     #########
 
     colresults = Dict{Int,Any}(
-        k => fetch(Dagger.spawn(length, v)) == 1 ? fetch(v) : v
-        for (k, v) in colresults
+        k => fetch(Dagger.spawn(length, v)) == 1 ? fetch(v) : v for (k, v) in colresults
     )
 
     mapmask = [
-        haskey(colresults, x) && colresults[x] isa Dagger.EagerThunk
-        for (x, _) in enumerate(normalized_cs)
+        haskey(colresults, x) && colresults[x] isa Dagger.EagerThunk for
+        (x, _) in enumerate(normalized_cs)
     ]
 
     mappable_part_of_normalized_cs = filter(x -> !mapmask[x[1]], collect(enumerate(normalized_cs)))
@@ -204,28 +221,33 @@ function _manipulate(df::DTable, normalized_cs::Vector{Any}, copycols::Bool, kee
 end
 
 # Not copied - full custom implementation
-function manipulate(dt::DTable, args::AbstractVector{Int}; copycols::Bool, keeprows::Bool, renamecols::Bool)
+function manipulate(
+    dt::DTable, args::AbstractVector{Int}; copycols::Bool, keeprows::Bool, renamecols::Bool
+)
     colidx = first(args)
     colname = Tables.columnnames(Tables.columns(dt))[colidx]
-    map(r -> (; colname => Tables.getcolumn(r, colidx)), dt)
+    return map(r -> (; colname => Tables.getcolumn(r, colidx)), dt)
 end
 
 # Copied as is from DataFrames.jl
-function manipulate(df::DTable, c::MultiColumnIndex; copycols::Bool, keeprows::Bool,
-    renamecols::Bool)
+function manipulate(
+    df::DTable, c::MultiColumnIndex; copycols::Bool, keeprows::Bool, renamecols::Bool
+)
     if c isa AbstractVector{<:Pair}
-        return manipulate(df, c..., copycols=copycols, keeprows=keeprows,
-            renamecols=renamecols)
+        return manipulate(df, c...; copycols=copycols, keeprows=keeprows, renamecols=renamecols)
     else
-        return manipulate(df, index(df)[c], copycols=copycols, keeprows=keeprows,
-            renamecols=renamecols)
+        return manipulate(
+            df, index(df)[c]; copycols=copycols, keeprows=keeprows, renamecols=renamecols
+        )
     end
 end
 
 # Copied as is from DataFrames.jl
-manipulate(df::DTable, c::ColumnIndex; copycols::Bool, keeprows::Bool, renamecols::Bool) =
-    manipulate(df, Int[index(df)[c]], copycols=copycols, keeprows=keeprows, renamecols=renamecols)
-
+function manipulate(df::DTable, c::ColumnIndex; copycols::Bool, keeprows::Bool, renamecols::Bool)
+    return manipulate(
+        df, Int[index(df)[c]]; copycols=copycols, keeprows=keeprows, renamecols=renamecols
+    )
+end
 
 """
     select(df::DTable, args...; copycols::Bool=true, renamecols::Bool=true)
@@ -241,6 +263,12 @@ please file an issue with reproduction steps and data.
 
 Please refer to DataFrames documentation for more details on usage.
 """
-select(df::DTable, @nospecialize(args...); copycols::Bool=true, renamecols::Bool=true) =
-    manipulate(df, map(x -> broadcast_pair(df, x), args)...,
-        copycols=copycols, keeprows=true, renamecols=renamecols)
+function select(df::DTable, @nospecialize(args...); copycols::Bool=true, renamecols::Bool=true)
+    return manipulate(
+        df,
+        map(x -> broadcast_pair(df, x), args)...;
+        copycols=copycols,
+        keeprows=true,
+        renamecols=renamecols,
+    )
+end
