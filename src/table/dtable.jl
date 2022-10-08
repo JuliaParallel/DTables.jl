@@ -72,17 +72,15 @@ function DTable(table, chunksize::Integer; tabletype=nothing, interpartition_mer
         end
 
         if interpartition_merges && leftovers !== nothing
-            inner_partitions =
-                partition |>
-                sink |>
-                TableOperations.makepartitions(chunksize - leftovers_length) |>
-                Tables.partitions
+            inner_partitions = Tables.partitions(
+                TableOperations.makepartitions(sink(partition), chunksize - leftovers_length)
+            )
 
-            merged_data =
-                [leftovers, sink(first(inner_partitions))] |>
-                x -> Tables.partitioner(identity, x) |>
-                TableOperations.joinpartitions |>
-                sink
+            merged_data = sink(
+                TableOperations.joinpartitions(
+                    Tables.partitioner(identity, [leftovers, sink(first(inner_partitions))])
+                ),
+            )
 
             if length(inner_partitions) == 1
                 leftovers = merged_data
@@ -99,18 +97,15 @@ function DTable(table, chunksize::Integer; tabletype=nothing, interpartition_mer
                 push!(chunks, Dagger.tochunk(merged_data))
                 leftovers = nothing
                 leftovers_length = 0
-                partition =
-                    Iterators.drop(inner_partitions, 1) |>
-                    x -> Tables.partitioner(identity, x) |>
-                    TableOperations.joinpartitions
+                partition = TableOperations.joinpartitions(
+                    Tables.partitioner(identity, Iterators.drop(inner_partitions, 1))
+                )
             end
         end
 
-        inner_partitions =
-            partition |>
-            sink |>
-            TableOperations.makepartitions(chunksize) |>
-            Tables.partitions
+        inner_partitions = Tables.partitions(
+            TableOperations.makepartitions(sink(partition), chunksize)
+        )
 
         for inner_partition in inner_partitions
             chunk_data = sink(inner_partition)
