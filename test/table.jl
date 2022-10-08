@@ -91,6 +91,106 @@ using OnlineStats
         @test da.tabletype === NamedTuple
     end
 
+    @testset "constructors - interpartition merges" begin
+        size = 1_000
+        nt = (a = rand(size), b = rand(size))
+        partition_size = 100
+
+        ####################################################################################
+        # interpartition merges ON
+        ####################################################################################
+        # cases where there's no leftover chunk (exact split)
+        for m in [-50, 0, 100]
+            d = DTable(
+                TableOperations.makepartitions(nt, partition_size),
+                partition_size + m
+            )
+            @test DTables.nchunks(d) == size ÷ (partition_size + m)
+            @test DTables.chunk_lengths(d) == [
+                partition_size + m for
+                _ in 1:(size ÷ (partition_size + m))
+            ]
+        end
+
+        # cases with leftover chunk (smaller than chunksize)
+        for m in [-70, -20 ,20, 50, 110]
+            d = DTable(
+                TableOperations.makepartitions(nt, partition_size),
+                partition_size + m
+            )
+            @test DTables.nchunks(d) == size ÷ (partition_size + m) + 1
+            @test DTables.chunk_lengths(d) == [
+                [
+                    partition_size + m for
+                    _ in 1:(size ÷ (partition_size + m))
+                ]...,
+                size - (partition_size + m) * (size ÷ (partition_size + m))
+            ]
+        end
+
+
+        ####################################################################################
+        # interpartition merges OFF
+        ####################################################################################
+        # smaller than; exact
+        m = -75
+        d = DTable(
+            TableOperations.makepartitions(nt, partition_size),
+            partition_size + m;
+            interpartition_merges=false,
+        )
+        @test DTables.nchunks(d) == size ÷ (partition_size + m)
+        @test DTables.chunk_lengths(d) == [
+            partition_size + m for
+            _ in 1:(size ÷ (partition_size + m))
+        ]
+
+        # smaller than; inexact
+        m = -70
+        d = DTable(
+            TableOperations.makepartitions(nt, partition_size),
+            partition_size + m;
+            interpartition_merges=false,
+        )
+        @test DTables.nchunks(d) == 40
+        @test DTables.chunk_lengths(d) == repeat([30,30,30,10], 10)
+
+
+        # same size
+        m = 0
+        d = DTable(
+            TableOperations.makepartitions(nt, partition_size),
+            partition_size + m;
+            interpartition_merges=false,
+        )
+        @test DTables.nchunks(d) == size ÷ (partition_size + m)
+        @test DTables.chunk_lengths(d) == [
+            partition_size + m for
+            _ in 1:(size ÷ (partition_size + m))
+        ]
+
+        # larger exact
+        m = 100
+        d = DTable(
+            TableOperations.makepartitions(nt, partition_size),
+            partition_size + m;
+            interpartition_merges=false,
+        )
+        @test DTables.nchunks(d) == 10
+        @test DTables.chunk_lengths(d) == repeat([100], 10)
+
+        # larger inexact
+
+        m = 37
+        d = DTable(
+            TableOperations.makepartitions(nt, partition_size),
+            partition_size + m;
+            interpartition_merges=false,
+        )
+        @test DTables.nchunks(d) == 10
+        @test DTables.chunk_lengths(d) == repeat([100], 10)
+    end
+
     @testset "map" begin
         size = 1_000
         nt = (a = rand(size), b = rand(size))

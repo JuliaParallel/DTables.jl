@@ -87,6 +87,13 @@ function DTable(table, chunksize::Integer; tabletype=nothing, interpartition_mer
             if length(inner_partitions) == 1
                 leftovers = merged_data
                 leftovers_length = Tables.length(Tables.rows(leftovers))
+                if leftovers_length == chunksize
+                    # sometimes the next partition will be exactly the size of
+                    # the chunksize - leftovers_length, so perfect match
+                    push!(chunks, Dagger.tochunk(merged_data))
+                    leftovers = nothing
+                    leftovers_length = 0
+                end
                 continue
             else
                 push!(chunks, Dagger.tochunk(merged_data))
