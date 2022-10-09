@@ -27,9 +27,9 @@ julia> fetch(m)
 """
 function map(f, d::DTable)
     chunk_wrap = (_chunk, _f) -> begin
-        if isnonempty(_chunk)
-            m = TableOperations.map(_f, _chunk)
-            Tables.materializer(_chunk)(m)
+        return if isnonempty(_chunk)
+            sink = Tables.materializer(_chunk)
+            sink(TableOperations.map(_f, _chunk))
         else
             _chunk
         end
