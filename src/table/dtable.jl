@@ -149,7 +149,6 @@ function DTable(loader_function::Function, files::Vector{String}; tabletype=noth
     return DTable(chunks, tabletype)
 end
 
-
 function _file_load(filename::AbstractString, loader_function::Function, tabletype::Any)
     part = loader_function(filename)
     sink = Tables.materializer(tabletype === nothing ? part : tabletype())
