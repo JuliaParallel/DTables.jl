@@ -75,3 +75,6 @@ function iterate(dtc::DTableColumn, iter)
     pull_next_chunk!(dtc)
     return dtc._iter
 end
+
+Base.eltype(dtc::DTableColumn) = Tables.schema(Tables.columns(dtc.dtable)).types[dtc.col]
+Base.collect(dtc::DTableColumn) = _getcolumn(dtc.dtable, dtc.col)

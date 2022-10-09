@@ -548,5 +548,12 @@ using OnlineStats
         @test propertynames(d) == [:a, :b]
         @test wait(d) === nothing
         @test isready(d)
+
+
+        m = map(x-> (ab=x.a + x.b,), d)
+        @test wait(m) === nothing
+        @test isready(m)
+        @test names(m) == ["ab"]
+        @test propertynames(m) == [:ab]
     end
 end

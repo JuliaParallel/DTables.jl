@@ -1,8 +1,8 @@
-import Tables
-import TableOperations
+import Base:
+    collect, eltype, fetch, getproperty, isready, iterate, length, names, propertynames, show, wait
 import SentinelArrays
-
-import Base: fetch, show, length, iterate, names, propertynames, wait, isready
+import TableOperations
+import Tables
 
 export DTable, tabletype, tabletype!, trim, trim!, leftjoin, innerjoin, DTableColumn
 
@@ -286,4 +286,12 @@ end
 
 function Base.isready(dt::DTable)
     return all([ch isa Dagger.Chunk ? true : (isready(ch); true) for ch in dt.chunks])
+end
+
+function Base.getproperty(dt::DTable, s::Symbol)
+    if s in fieldnames(DTable)
+        return getfield(dt, s)
+    else
+        return DTableColumn(dt, s)
+    end
 end
