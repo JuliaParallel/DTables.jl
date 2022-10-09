@@ -146,6 +146,6 @@ function getindex(gdt::GDTable, key)
     return partition(gdt, ck)
 end
 
-_columnnames_svector(gd::GDTable) = _columnnames_svector(gd.dtable)
+columnnames_svector(gd::GDTable) = columnnames_svector(gd.dtable)
 
 @inline nchunks(gd::GDTable) = length(gd.dtable.chunks)

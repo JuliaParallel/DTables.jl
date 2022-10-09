@@ -101,4 +101,4 @@ function fillcolumns(
 end
 
 ncol(d::DTable) = length(Tables.columns(d))
-index(df::DTable) = Index(_columnnames_svector(df))
+index(df::DTable) = Index(columnnames_svector(df))

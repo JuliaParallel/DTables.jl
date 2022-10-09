@@ -356,7 +356,7 @@ using OnlineStats
 
         for kwargs in kwargs_set
             g = DTables.groupby(d, :a; kwargs...)
-            c = DTables._retrieve.(g.dtable.chunks)
+            c = DTables.retrieve.(g.dtable.chunks)
             @test all([all(t.a[1] .== t.a) for t in c])
             @test all(getindex.(getproperty.(c, :a), 1) .∈ Ref(charset))
             @test sort(collect(fetch(d).a)) == sort(collect(fetch(g).a))
@@ -368,7 +368,7 @@ using OnlineStats
 
         for kwargs in kwargs_set
             g = DTables.groupby(d, [:a, :b]; kwargs...)
-            c = DTables._retrieve.(g.dtable.chunks)
+            c = DTables.retrieve.(g.dtable.chunks)
             @test all([all(t.a[1] .== t.a) for t in c])
             @test all([all(t.b[1] .== t.b) for t in c])
             @test all(getindex.(getproperty.(c, :a), 1) .∈ Ref(charset))
@@ -389,7 +389,7 @@ using OnlineStats
         f2 = x -> x % 10
         for kwargs in kwargs_set
             g = DTables.groupby(d, f1)
-            c = DTables._retrieve.(g.dtable.chunks)
+            c = DTables.retrieve.(g.dtable.chunks)
             @test all([all(f2(t.a[1]) .== f2.(t.a)) for t in c])
             @test all(getindex.(getproperty.(c, :a), 1) .∈ Ref(intset))
             @test sort(collect(fetch(d).a)) == sort(collect(fetch(g).a))
@@ -407,7 +407,7 @@ using OnlineStats
         for key in keys(g.index)
             chunk_indices = g.index[key]
             chunks = getindex.(Ref(g.dtable.chunks), chunk_indices)
-            parts = DTables._retrieve.(chunks)
+            parts = DTables.retrieve.(chunks)
 
             @test all([all(key .== p.a) for p in parts])
         end
@@ -427,7 +427,7 @@ using OnlineStats
         for key in keys(m.index)
             chunk_indices = m.index[key]
             chunks = getindex.(Ref(m.dtable.chunks), chunk_indices)
-            parts = DTables._retrieve.(chunks)
+            parts = DTables.retrieve.(chunks)
             @test all([all((key + 3) .== p.result) for p in parts])
             @test all(fetch(m[key]).a .== key)
         end

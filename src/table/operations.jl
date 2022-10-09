@@ -100,7 +100,7 @@ function reduce(
     # handle empty dtables
     nchunks(d) == 0 && return Dagger.@spawn NamedTuple()
 
-    columns = cols === nothing ? _columnnames_svector(d) : cols
+    columns = cols === nothing ? columnnames_svector(d) : cols
 
     chunk_reduce_results = _reduce_chunks(f, d.chunks, columns; init=init)
 
@@ -180,7 +180,7 @@ function reduce(
     # handle empty dtables
     nchunks(gd) == 0 && return Dagger.@spawn NamedTuple()
 
-    columns = cols === nothing ? _columnnames_svector(gd) : cols
+    columns = cols === nothing ? columnnames_svector(gd) : cols
 
     chunk_reduce_results = _reduce_chunks(f, gd.dtable.chunks, columns; init=init)
 
