@@ -102,7 +102,9 @@ function DTable(table, chunksize::Integer; tabletype=nothing, interpartition_mer
             end
         end
 
-        inner_partitions = partitions(TableOperations.makepartitions(sink(partition), chunksize))
+        inner_partitions = partitions(
+            TableOperations.makepartitions(sink(partition), chunksize)
+        )
 
         for inner_partition in inner_partitions
             chunk_data = sink(inner_partition)
@@ -293,4 +295,4 @@ end
 
 ncol(d::DTable) = length(columns(d))
 nrow(d::DTable) = length(d)
-index(df::DTable) = Index(columnnames_svector(df))
+index(df::DTable) = Index(_columnnames_svector(df))

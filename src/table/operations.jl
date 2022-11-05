@@ -122,7 +122,8 @@ function _reduce_chunks(
     columns::Vector{Symbol};
     init=Base._InitialValue(),
 )
-    col_in_chunk_reduce = (_f, _c, _init, _chunk) -> reduce(_f, getcolumn(_chunk, _c); init=_init)
+    col_in_chunk_reduce =
+        (_f, _c, _init, _chunk) -> reduce(_f, getcolumn(_chunk, _c); init=_init)
 
     chunk_reduce =
         (_f, _chunk, _cols, _init) -> begin
