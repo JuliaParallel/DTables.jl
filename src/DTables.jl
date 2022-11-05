@@ -30,10 +30,11 @@ import Base:
     fetch,
     filter,
     getindex,
-    getproperty,
     isready,
     iterate,
+    iterate,
     keys,
+    length,
     length,
     map,
     mapreduce,
@@ -41,7 +42,8 @@ import Base:
     propertynames,
     reduce,
     show,
-    wait
+    wait,
+    getproperty
 import DataAPI: leftjoin, ncol, nrow, innerjoin
 import Tables:
     columnaccess, columnnames, columns, getcolumn, istable, partitions, rowaccess, rows, schema
