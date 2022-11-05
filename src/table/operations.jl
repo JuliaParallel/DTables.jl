@@ -283,9 +283,9 @@ and `op` is the reduce function applied to the results of the mapping operation.
 
 # Examples
 
-julia> using Dagger, OnlineStats
+julia> using DTables, OnlineStats
 
-julia> fetch(Dagger.mapreduce(sum, fit!, d1, init = Mean()))
+julia> fetch(DTables.mapreduce(sum, fit!, d1, init = Mean()))
 Mean: n=100 | value=1.50573
 """
 

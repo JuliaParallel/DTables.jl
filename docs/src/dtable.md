@@ -10,7 +10,7 @@ Provide a `Tables.jl` compatible source, as well as a `chunksize`, which is the
 maximum number of rows of each partition:
 
 ```julia
-julia> using Dagger
+julia> using DTables
 
 julia> table = (a=[1, 2, 3, 4, 5], b=[6, 7, 8, 9, 10]);
 
@@ -28,7 +28,7 @@ Provide a `loader_function` and a list of filenames, which are parts of the
 full table:
 
 ```julia
-julia> using Dagger, CSV
+julia> using DTables, CSV
 
 julia> files = ["1.csv", "2.csv", "3.csv"];
 
@@ -99,7 +99,7 @@ Below is an example of their usage.
 For more information please refer to the API documentation and unit tests.
 
 ```julia
-julia> using Dagger
+julia> using DTables
 
 julia> d = DTable((k = repeat(['a', 'b'], 500), v = repeat(1:10, 100)), 100)
 DTable with 10 partitions
@@ -153,16 +153,16 @@ It lets you transform a row to the required format before applying the reduce fu
 In consequence a lot of memory usage should be saved due to the lack of an intermediate `map` step that allocates a full column.
 
 ```julia
-julia> using Dagger, OnlineStats
+julia> using DTables, OnlineStats
 
-julia> fetch(Dagger.mapreduce(sum, fit!, d1, init = Mean()))
+julia> fetch(DTables.mapreduce(sum, fit!, d1, init = Mean()))
 Mean: n=100 | value=1.50573
 
 julia> d1 = DTable((a=collect(1:100).%3, b=rand(100)), 25);
 
 julia> gg = GroupBy(Int, Mean());
 
-julia> fetch(Dagger.mapreduce(x-> (x.a, x.b), fit!, d1, init=gg))
+julia> fetch(DTables.mapreduce(x-> (x.a, x.b), fit!, d1, init=gg))
 GroupBy: Int64 => Mean
 ├─ 1
 │  └─ Mean: n=34 | value=0.491379
@@ -175,7 +175,7 @@ julia> d2 = DTable((;a1=abs.(rand(Int, 100).%2), [Symbol("a\$(i)") => rand(100) 
 
 julia> gb = GroupBy(Int, Group([Series(Mean(), Variance(), Extrema()) for _ in 1:3]...));
 
-julia> fetch(Dagger.mapreduce(r -> (r.a1, tuple(r...)), fit!, d2, init = gb))
+julia> fetch(DTables.mapreduce(r -> (r.a1, tuple(r...)), fit!, d2, init = gb))
 GroupBy: Int64 => Group
 ├─ 1
 │  └─ Group
@@ -208,7 +208,7 @@ GroupBy: Int64 => Group
 ```
 
 
-# Dagger.groupby interface
+# DTables.groupby interface
 
 A `DTable` can be grouped which will result in creation of a `GDTable`.
 A distinct set of values contained in a single or multiple columns can be used as grouping keys.
@@ -224,22 +224,22 @@ julia> d = DTable((a=shuffle(repeat('a':'d', inner=4, outer=4)),b=repeat(1:4, 16
 DTable with 16 partitions
 Tabletype: NamedTuple
 
-julia> Dagger.groupby(d, :a)
+julia> DTables.groupby(d, :a)
 GDTable with 4 partitions and 4 keys
 Tabletype: NamedTuple
 Grouped by: [:a]
 
-julia> Dagger.groupby(d, [:a, :b])
+julia> DTables.groupby(d, [:a, :b])
 GDTable with 16 partitions and 16 keys
 Tabletype: NamedTuple
 Grouped by: [:a, :b]
 
-julia> Dagger.groupby(d, row -> row.a + row.b)
+julia> DTables.groupby(d, row -> row.a + row.b)
 GDTable with 7 partitions and 7 keys
 Tabletype: NamedTuple
 Grouped by: #5
 
-julia> g = Dagger.groupby(d, :a); keys(g)
+julia> g = DTables.groupby(d, :a); keys(g)
 KeySet for a Dict{Char, Vector{UInt64}} with 4 entries. Keys:
   'c'
   'd'
@@ -256,7 +256,7 @@ Tabletype: NamedTuple
 Operations such as `map`, `filter`, `reduce` can be performed on a `GDTable`
 
 ```julia
-julia> g = Dagger.groupby(d, [:a, :b])
+julia> g = DTables.groupby(d, [:a, :b])
 GDTable with 16 partitions and 16 keys
 Tabletype: NamedTuple
 Grouped by: [:a, :b]
@@ -308,7 +308,7 @@ julia> d = DTable((a=repeat('a':'b', inner=2),b=1:4), 2)
 DTable with 2 partitions
 Tabletype: NamedTuple
 
-julia> g = Dagger.groupby(d, :a)
+julia> g = DTables.groupby(d, :a)
 GDTable with 2 partitions and 2 keys
 Tabletype: NamedTuple
 Grouped by: [:a]
@@ -355,7 +355,7 @@ the join functions coming from the `DataFrames.jl` package for the per chunk joi
 In the future this behavior will be expanded to any type that implements its own join methods, but for now is limited to `DataFrame` only.
 
 Please note that the usage of any of the keyword arguments described above will always result in the usage of generic join methods
-defined in `Dagger` regardless of the availability of specialized methods.
+defined in `DTables` regardless of the availability of specialized methods.
 
 ```julia
 julia> using Tables; pp = d -> for x in Tables.rows(d) println("$(x.a), $(x.b), $(x.c)") end;
