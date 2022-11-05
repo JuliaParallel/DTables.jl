@@ -6,7 +6,15 @@ module DTables
 
 using Dagger: Dagger
 using DataAPI: BroadcastedSelector
-using DataFrames: AsTable, ByRow, ColumnIndex, MultiColumnIndex, normalize_selection, Index
+using DataFrames:
+    AbstractDataFrame,
+    AsTable,
+    ByRow,
+    ColumnIndex,
+    MultiColumnIndex,
+    normalize_selection,
+    Index,
+    make_pair_concrete
 using InvertedIndices: BroadcastedInvertedIndex
 using SentinelArrays: ChainedVector
 using TableOperations: TableOperations
@@ -45,12 +53,13 @@ import Base:
 import DataAPI: leftjoin, ncol, nrow, innerjoin
 import Tables:
     columnaccess, columnnames, columns, getcolumn, istable, partitions, rowaccess, rows, schema
+import DataFrames: broadcast_pair, select
 
 ############################################################################################
 # Export
 ############################################################################################
 
-export DTable, DTableColumn, innerjoin, leftjoin, tabletype, tabletype!, trim, trim!
+export DTable, DTableColumn, innerjoin, leftjoin, select, tabletype, tabletype!, trim, trim!
 
 ############################################################################################
 
