@@ -9,11 +9,11 @@ mutable struct DTableColumn{T,TT}
 end
 
 function getcolumn_chunk(chunk_contents, col::Int)
-    return Tables.getcolumn(Tables.columns(chunk_contents), col)
+    return getcolumn(columns(chunk_contents), col)
 end
 
 function DTableColumn(d::DTable, col::Int)
-    column_eltype = Tables.schema(Tables.columns(d)).types[col]
+    column_eltype = schema(columns(d)).types[col]
 
     iterator_type = Nothing
     c_idx = 1

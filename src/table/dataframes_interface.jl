@@ -1,7 +1,3 @@
-import DataAPI: All, Between, BroadcastedSelector, Cols
-import DataFrames: AsTable, ByRow, ColumnIndex, MultiColumnIndex, normalize_selection
-import InvertedIndices: BroadcastedInvertedIndex
-
 function make_pair_concrete(@nospecialize(x::Pair))
     return make_pair_concrete(x.first) => make_pair_concrete(x.second)
 end
@@ -225,8 +221,8 @@ function manipulate(
     dt::DTable, args::AbstractVector{Int}; copycols::Bool, keeprows::Bool, renamecols::Bool
 )
     colidx = first(args)
-    colname = Tables.columnnames(Tables.columns(dt))[colidx]
-    return map(r -> (; colname => Tables.getcolumn(r, colidx)), dt)
+    colname = columnnames(columns(dt))[colidx]
+    return map(r -> (; colname => getcolumn(r, colidx)), dt)
 end
 
 # Copied as is from DataFrames.jl

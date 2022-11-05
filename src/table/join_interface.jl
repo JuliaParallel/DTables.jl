@@ -1,5 +1,3 @@
-import DataAPI: leftjoin, innerjoin
-
 # A set of kwargs that can be provided by the user.
 # Used for deciding whether to use the `DTables` join implementation directly
 # or to attempt using an external join function.
@@ -191,7 +189,7 @@ function _join(
         push!(to_merge, outer)
     end
 
-    return merge_chunks(Tables.materializer(l_chunk), to_merge)
+    return merge_chunks(materializer(l_chunk), to_merge)
 end
 
 """

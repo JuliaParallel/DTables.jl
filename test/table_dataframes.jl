@@ -3,7 +3,7 @@ using Test
 using Tables
 using DataFrames
 using Statistics
-import SentinelArrays
+using SentinelArrays: ChainedVector
 
 @testset "dtable-dataframes" begin
     @testset "select" begin
@@ -49,7 +49,7 @@ import SentinelArrays
         # @test # t(AsTable([:a, :b]) => identity) # this should technically fail on DTables
         @test t(AsTable([:a, :b]) => identity => AsTable)
         @test t([] => ByRow(() -> 1) => :x)
-        @test fetch(DTables.select(dt, [] => ByRow(rand) => :x)).x isa SentinelArrays.ChainedVector{Float64, Vector{Float64}}
-        @test fetch(DTables.select(dt, [] => (() -> rand(s)) => :x)).x isa SentinelArrays.ChainedVector{Float64, Vector{Float64}}
+        @test fetch(DTables.select(dt, [] => ByRow(rand) => :x)).x isa ChainedVector{Float64, Vector{Float64}}
+        @test fetch(DTables.select(dt, [] => (() -> rand(s)) => :x)).x isa ChainedVector{Float64, Vector{Float64}}
     end
 end
