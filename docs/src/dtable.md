@@ -87,6 +87,60 @@ julia> fetch(d, NamedTuple)
 (a = [1, 2, 3, 4, 5], b = [6, 7, 8, 9, 10])
 ```
 
+## Behavior of the `interpartition_merges` kwarg
+
+If a source supports the `Tables.partitions` interface then the DTable
+will assume the partitioning size from the source. However, if you decide
+to specify the exact size of the chunk the DTable will attempt to create
+chunks exactly of that size even if it means merging data between partitions.
+The behavior can be controlled by the `interpartition_merges` (`true` by default)
+kwarg and is best seen on the following example.
+
+```julia
+julia> using DTables, CSV
+
+julia> DTable(CSV.Chunks("test.csv", ntasks=4)) |> DTables.chunk_lengths
+4-element Vector{Int64}:
+ 249995
+ 250005
+ 249995
+ 250005
+
+julia> DTable(CSV.Chunks("test.csv", ntasks=4), 200_000) |> DTables.chunk_lengths
+5-element Vector{Int64}:
+ 200000
+ 200000
+ 200000
+ 200000
+ 200000
+
+julia> DTable(CSV.Chunks("test.csv", ntasks=4), 200_000, interpartition_merges=false) |> DTables.chunk_lengths
+8-element Vector{Int64}:
+ 200000
+  49995
+ 200000
+  50005
+ 200000
+  49995
+ 200000
+  50005
+
+julia> DTable(CSV.Chunks("test.csv", ntasks=4), 300_000) |> DTables.chunk_lengths
+4-element Vector{Int64}:
+ 300000
+ 300000
+ 300000
+ 100000
+
+julia> DTable(CSV.Chunks("test.csv", ntasks=4), 300_000, interpartition_merges=false) |> DTables.chunk_lengths
+4-element Vector{Int64}:
+ 249995
+ 250005
+ 249995
+ 250005
+
+```
+
 # Table operations
 
 **Warning: this interface is experimental and may change at any time**
