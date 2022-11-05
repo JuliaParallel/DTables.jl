@@ -1,9 +1,40 @@
-struct DTablesWrapper <: AbstractDataFrame
+struct DTableAbstractDataFrameWrapper <: AbstractDataFrame
     d::DTable
 end
 
-broadcast_pair(df::DTable, p) = broadcast_pair(DTablesWrapper(df), p)
+broadcast_pair(df::DTable, p) = broadcast_pair(DTableAbstractDataFrameWrapper(df), p)
 
+# Not copied - full custom implementation
+# There's a copymetadata here now
+function manipulate(
+    dt::DTable, args::AbstractVector{Int}; copycols::Bool, keeprows::Bool, renamecols::Bool
+)
+    colidx = first(args)
+    colname = columnnames(columns(dt))[colidx]
+    return map(r -> (; colname => getcolumn(r, colidx)), dt)
+end
+
+# Copied as is from DataFrames.jl
+function manipulate(
+    df::DTable, c::MultiColumnIndex; copycols::Bool, keeprows::Bool, renamecols::Bool
+)
+    if c isa AbstractVector{<:Pair}
+        return manipulate(df, c...; copycols=copycols, keeprows=keeprows, renamecols=renamecols)
+    else
+        return manipulate(
+            df, index(df)[c]; copycols=copycols, keeprows=keeprows, renamecols=renamecols
+        )
+    end
+end
+
+# Copied as is from DataFrames.jl
+function manipulate(df::DTable, c::ColumnIndex; copycols::Bool, keeprows::Bool, renamecols::Bool)
+    return manipulate(
+        df, Int[index(df)[c]]; copycols=copycols, keeprows=keeprows, renamecols=renamecols
+    )
+end
+
+# Copied as is from DataFrames.jl
 function manipulate(
     df::DTable, @nospecialize(cs...); copycols::Bool, keeprows::Bool, renamecols::Bool
 )
@@ -91,36 +122,6 @@ function _manipulate(df::DTable, normalized_cs::Vector{Any}, copycols::Bool, kee
     return rd
 end
 
-# Not copied - full custom implementation
-# There's a copymetadata here now
-function manipulate(
-    dt::DTable, args::AbstractVector{Int}; copycols::Bool, keeprows::Bool, renamecols::Bool
-)
-    colidx = first(args)
-    colname = columnnames(columns(dt))[colidx]
-    return map(r -> (; colname => getcolumn(r, colidx)), dt)
-end
-
-# Copied as is from DataFrames.jl
-function manipulate(
-    df::DTable, c::MultiColumnIndex; copycols::Bool, keeprows::Bool, renamecols::Bool
-)
-    if c isa AbstractVector{<:Pair}
-        return manipulate(df, c...; copycols=copycols, keeprows=keeprows, renamecols=renamecols)
-    else
-        return manipulate(
-            df, index(df)[c]; copycols=copycols, keeprows=keeprows, renamecols=renamecols
-        )
-    end
-end
-
-# Copied as is from DataFrames.jl
-function manipulate(df::DTable, c::ColumnIndex; copycols::Bool, keeprows::Bool, renamecols::Bool)
-    return manipulate(
-        df, Int[index(df)[c]]; copycols=copycols, keeprows=keeprows, renamecols=renamecols
-    )
-end
-
 """
     select(df::DTable, args...; copycols::Bool=true, renamecols::Bool=true)
 
@@ -135,7 +136,13 @@ please file an issue with reproduction steps and data.
 
 Please refer to DataFrames documentation for more details on usage.
 """
-function select(df::DTable, @nospecialize(args...); copycols::Bool=true, renamecols::Bool=true)
+function select(
+    df::DTable,
+    @nospecialize(args...);
+    copycols::Bool=true,
+    renamecols::Bool=true,
+    threads::Bool=true,
+)
     return manipulate(
         df,
         map(x -> broadcast_pair(df, x), args)...;
