@@ -9,7 +9,7 @@ function select_rowfunction(row, mappable_part_of_normalized_cs, colresults)
                         [
                             k => getcolumn(row, k) for
                             k in getindex.(Ref(columnnames(row)), colidx.cols)
-                        ]...
+                        ]...,
                     )
                 else
                     getcolumn.(Ref(row), colidx)
@@ -66,12 +66,7 @@ function fillcolumns(
                     end
 
                     push!.(Ref(colnames), columnnames(columns(c)))
-                    push!.(
-                        Ref(cols),
-                        getcolumn.(
-                            Ref(columns(c)), columnnames(columns(c))
-                        ),
-                    )
+                    push!.(Ref(cols), getcolumn.(Ref(columns(c)), columnnames(columns(c))))
                 else
                     throw(ErrorException("something is off"))
                 end

@@ -11,28 +11,48 @@ using InvertedIndices: BroadcastedInvertedIndex
 using SentinelArrays: ChainedVector
 using TableOperations: TableOperations
 using Tables:
-    columnindex, columnnames, columns, columntable, getcolumn, materializer, partitioner,
-    rows, schema, Schema
+    columnindex,
+    columnnames,
+    columns,
+    columntable,
+    getcolumn,
+    materializer,
+    partitioner,
+    rows,
+    schema,
+    Schema
 
 ############################################################################################
 # Extend
 ############################################################################################
 
 import Base:
-    fetch, filter, getindex, isready, iterate, iterate, keys, length, length, map,
-    mapreduce, names, propertynames, reduce, show, wait, getproperty
-import DataAPI:
-    leftjoin, ncol, nrow, innerjoin
+    fetch,
+    filter,
+    getindex,
+    isready,
+    iterate,
+    iterate,
+    keys,
+    length,
+    length,
+    map,
+    mapreduce,
+    names,
+    propertynames,
+    reduce,
+    show,
+    wait,
+    getproperty
+import DataAPI: leftjoin, ncol, nrow, innerjoin
 import Tables:
-    columnaccess, columnnames, columns, getcolumn, istable, partitions, rowaccess, rows,
-    schema
+    columnaccess, columnnames, columns, getcolumn, istable, partitions, rowaccess, rows, schema
 
 ############################################################################################
 # Export
 ############################################################################################
 
-export
-    DTable, DTableColumn, innerjoin, leftjoin, tabletype, tabletype!, trim, trim!
+export DTable, DTableColumn, innerjoin, leftjoin, tabletype, tabletype!, trim, trim!
 
 ############################################################################################
 
