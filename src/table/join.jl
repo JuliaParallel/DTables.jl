@@ -14,16 +14,16 @@ function resolve_colnames(l, r, on)
         r_cmp_symbols = getindex.(on, 2)
     end
 
-    l_cols = Tables.columns(l)
-    l_schema = Tables.schema(l_cols)
-    cmp_l_indices = Tables.columnindex.(Ref(l_schema), l_cmp_symbols)
+    l_cols = columns(l)
+    l_schema = schema(l_cols)
+    cmp_l_indices = columnindex.(Ref(l_schema), l_cmp_symbols)
     other_l_indices = setdiff(1:length(l_cols), cmp_l_indices)
     cmp_l = NTuple{length(cmp_l_indices),Int}(cmp_l_indices)
     other_l = NTuple{length(other_l_indices),Int}(other_l_indices)
 
-    r_cols = Tables.columns(r)
-    r_schema = Tables.schema(r_cols)
-    cmp_r_indices = Tables.columnindex.(Ref(r_schema), r_cmp_symbols)
+    r_cols = columns(r)
+    r_schema = schema(r_cols)
+    cmp_r_indices = columnindex.(Ref(r_schema), r_cmp_symbols)
     other_r_indices = setdiff(1:length(r_cols), cmp_r_indices)
     cmp_r = NTuple{length(cmp_r_indices),Int}(cmp_r_indices)
     other_r = NTuple{length(other_r_indices),Int}(other_r_indices)
@@ -44,13 +44,13 @@ Returns two vectors containing indices of matched rows.
 Standard non-optimized use case.
 """
 function match_inner_indices(l, r, l_ind::NTuple{N,Int}, r_ind::NTuple{N,Int}) where {N}
-    l_length = length(Tables.rows(l))
+    l_length = length(rows(l))
     vl = Vector{UInt}()
     vr = Vector{UInt}()
     sizehint!(vl, l_length)
     sizehint!(vr, l_length)
-    for (oind, oel) in enumerate(Tables.rows(l))
-        for (iind, iel) in enumerate(Tables.rows(r))
+    for (oind, oel) in enumerate(rows(l))
+        for (iind, iel) in enumerate(rows(r))
             if compare_rows_eq(oel, iel, l_ind, r_ind)
                 push!(vl, oind)
                 push!(vr, iind)
@@ -71,15 +71,15 @@ form of a `Tuple` of all matching columns and values in form
 of type `Vector{UInt}` containing the related row indices.
 """
 function match_inner_indices_lookup(l, lookup, l_ind::NTuple{N,Int}) where {N}
-    l_length = length(Tables.rows(l))
+    l_length = length(rows(l))
     vl = Vector{UInt}()
     vr = Vector{UInt}()
     sizehint!(vl, l_length)
     sizehint!(vr, l_length)
 
-    row_tuple = (row, cols) -> ([Tables.getcolumn(row, x) for x in cols]...,)
+    row_tuple = (row, cols) -> ([getcolumn(row, x) for x in cols]...,)
     _evec = Vector{UInt}()
-    for (oind, oel) in enumerate(Tables.rows(l))
+    for (oind, oel) in enumerate(rows(l))
         indices = get(lookup, row_tuple(oel, l_ind), _evec)
         for iind in indices
             push!(vl, oind)
@@ -98,14 +98,14 @@ Optimized pass for the left table sorted, right table sorted and optionally righ
 function match_inner_indices_lsorted_rsorted(
     l, r, cmp_l::NTuple{N,Int}, cmp_r::NTuple{N,Int}, runique::Bool
 ) where {N}
-    l_length = length(Tables.rows(l))
+    l_length = length(rows(l))
     vl = Vector{UInt}()
     vr = Vector{UInt}()
     sizehint!(vl, l_length)
     sizehint!(vr, l_length)
 
-    ri = enumerate(Tables.rows(r))
-    li = enumerate(Tables.rows(l))
+    ri = enumerate(rows(r))
+    li = enumerate(rows(l))
 
     riter = iterate(ri)
     liter = iterate(li)
@@ -159,14 +159,14 @@ Returns two vectors containing indices of matched rows.
 Optimized pass for joins with the right table containing unique keys only.
 """
 function match_inner_indices_runique(l, r, cmp_l::NTuple{N,Int}, cmp_r::NTuple{N,Int}) where {N}
-    l_length = length(Tables.rows(l))
+    l_length = length(rows(l))
     vl = Vector{UInt}()
     vr = Vector{UInt}()
     sizehint!(vl, l_length)
     sizehint!(vr, l_length)
 
-    for (oind, oel) in enumerate(Tables.rows(l))
-        for (iind, iel) in enumerate(Tables.rows(r))
+    for (oind, oel) in enumerate(rows(l))
+        for (iind, iel) in enumerate(rows(r))
             if compare_rows_eq(oel, iel, cmp_l, cmp_r)
                 push!(vl, oind)
                 push!(vr, iind)
@@ -184,14 +184,14 @@ Returns two vectors containing indices of matched rows.
 Optimized pass for joins with a sorted right table.
 """
 function match_inner_indices_rsorted(l, r, cmp_l::NTuple{N,Int}, cmp_r::NTuple{N,Int}) where {N}
-    l_length = length(Tables.rows(l))
+    l_length = length(rows(l))
     vl = Vector{UInt}()
     vr = Vector{UInt}()
     sizehint!(vl, l_length)
     sizehint!(vr, l_length)
 
-    for (oind, oel) in enumerate(Tables.rows(l))
-        for (iind, iel) in enumerate(Tables.rows(r))
+    for (oind, oel) in enumerate(rows(l))
+        for (iind, iel) in enumerate(rows(r))
             if compare_rows_lt(oel, iel, cmp_l, cmp_r)
                 break
             elseif compare_rows_eq(oel, iel, cmp_l, cmp_r)
@@ -209,7 +209,7 @@ end
 Finds the unmatched indices from the table.
 """
 function find_outer_indices(d, inner_indices)
-    s = Set(one(UInt):length(Tables.rows(d)))
+    s = Set(one(UInt):length(rows(d)))
     return setdiff!(s, inner_indices)
 end
 
@@ -237,7 +237,7 @@ function build_joined_table(
 
     colcounter = one(Int)
 
-    for c in Tables.columns(l)
+    for c in columns(l)
         newc = Vector{eltype(c)}(undef, fulllength)
         copyto!(newc, view(c, inner_l))
         copyto!(newc, length(inner_l) + 1, view(c, collect(outer_l)))
@@ -245,27 +245,27 @@ function build_joined_table(
         colcounter += 1
     end
 
-    rcols = Tables.columns(r)
+    rcols = columns(r)
     for i in other_r
-        t = Tables.schema(rcols).types[i]
+        t = schema(rcols).types[i]
         vectype = jointype == :innerjoin ? t : Union{t,Missing}
         newc = Vector{vectype}(undef, fulllength)
         if length(inner_r) > 0 # skip fetching and copying if there's no records matched
-            c = Tables.getcolumn(rcols, i)
+            c = getcolumn(rcols, i)
             copyto!(newc, view(c, inner_r))
         end
         cols[colcounter] = newc
         colcounter += 1
     end
 
-    sink = Tables.materializer(l)
+    sink = materializer(l)
     return sink((; zip(names, cols)...))
 end
 
 @inline function compare_rows_eq(o, i, cmp_l::NTuple{N,Int}, cmp_r::NTuple{N,Int}) where {N}
     test = true
     @inbounds for x in 1:N
-        test &= Tables.getcolumn(o, cmp_l[x]) == Tables.getcolumn(i, cmp_r[x])
+        test &= getcolumn(o, cmp_l[x]) == getcolumn(i, cmp_r[x])
         test || break
     end
     return test
@@ -273,8 +273,8 @@ end
 
 @inline function compare_rows_lt(o, i, cmp_l::NTuple{N,Int}, cmp_r::NTuple{N,Int}) where {N}
     @inbounds for x in 1:N
-        l = Tables.getcolumn(o, cmp_l[x])
-        r = Tables.getcolumn(i, cmp_r[x])
+        l = getcolumn(o, cmp_l[x])
+        r = getcolumn(i, cmp_r[x])
         if l > r
             return false
         elseif l < r

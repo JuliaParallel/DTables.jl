@@ -1,5 +1,3 @@
-import Base: filter, map, reduce, mapreduce
-
 """
     map(f, d::DTable) -> DTable
 
@@ -28,7 +26,7 @@ julia> fetch(m)
 function map(f, d::DTable)
     chunk_wrap = (_chunk, _f) -> begin
         return if isnonempty(_chunk)
-            sink = Tables.materializer(_chunk)
+            sink = materializer(_chunk)
             sink(TableOperations.map(_f, _chunk))
         else
             _chunk
@@ -124,8 +122,7 @@ function _reduce_chunks(
     columns::Vector{Symbol};
     init=Base._InitialValue(),
 )
-    col_in_chunk_reduce =
-        (_f, _c, _init, _chunk) -> reduce(_f, Tables.getcolumn(_chunk, _c); init=_init)
+    col_in_chunk_reduce = (_f, _c, _init, _chunk) -> reduce(_f, getcolumn(_chunk, _c); init=_init)
 
     chunk_reduce =
         (_f, _chunk, _cols, _init) -> begin
@@ -238,7 +235,7 @@ julia> fetch(f)
 function filter(f, d::DTable)
     chunk_wrap = (_chunk, _f) -> begin
         m = TableOperations.filter(_f, _chunk)
-        Tables.materializer(_chunk)(m)
+        materializer(_chunk)(m)
     end
     return DTable(map(c -> Dagger.spawn(chunk_wrap, c, f), d.chunks), d.tabletype, d.schema)
 end

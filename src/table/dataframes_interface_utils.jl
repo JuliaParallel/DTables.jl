@@ -1,5 +1,3 @@
-import DataAPI: ncol
-import DataFrames: Index, ByRow, AsTable
 
 function select_rowfunction(row, mappable_part_of_normalized_cs, colresults)
     _cs = [
@@ -9,12 +7,12 @@ function select_rowfunction(row, mappable_part_of_normalized_cs, colresults)
                 args = if colidx isa AsTable
                     (;
                         [
-                            k => Tables.getcolumn(row, k) for
-                            k in getindex.(Ref(Tables.columnnames(row)), colidx.cols)
+                            k => getcolumn(row, k) for
+                            k in getindex.(Ref(columnnames(row)), colidx.cols)
                         ]...
                     )
                 else
-                    Tables.getcolumn.(Ref(row), colidx)
+                    getcolumn.(Ref(row), colidx)
                 end
 
                 if f isa ByRow && !(colidx isa AsTable) && length(colidx) == 0
@@ -54,31 +52,26 @@ function fillcolumns(
                         index = something(indexin(csymbols, [sym])...)
                         col_vecs_fetched[index]
                     else
-                        Tables.getcolumn(ch, sym)
+                        getcolumn(ch, sym)
                     end
                     push!(colnames, sym)
                     push!(cols, col)
                 elseif sym === AsTable
                     i = findfirst(x -> x === AsTable, csymbols[(last_astable + 1):end])
                     if i === nothing
-                        c = Tables.getcolumn(ch, Symbol("AsTable$(idx)"))
+                        c = getcolumn(ch, Symbol("AsTable$(idx)"))
                     else
                         last_astable = i
                         c = col_vecs_fetched[i]
                     end
 
-                    push!.(Ref(colnames), Tables.columnnames(Tables.columns(c)))
-                    push!.(
-                        Ref(cols),
-                        Tables.getcolumn.(
-                            Ref(Tables.columns(c)), Tables.columnnames(Tables.columns(c))
-                        ),
-                    )
+                    push!.(Ref(colnames), columnnames(columns(c)))
+                    push!.(Ref(cols), getcolumn.(Ref(columns(c)), columnnames(columns(c))))
                 else
                     throw(ErrorException("something is off"))
                 end
             end
-            Tables.materializer(ch)(
+            materializer(ch)(
                 merge(NamedTuple(), (; [e[1] => e[2] for e in zip(colnames, cols)]...))
             )
         end
@@ -99,6 +92,3 @@ function fillcolumns(
 
     return DTable(chunks, dt.tabletype)
 end
-
-ncol(d::DTable) = length(Tables.columns(d))
-index(df::DTable) = Index(columnnames_svector(df))

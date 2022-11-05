@@ -1,11 +1,3 @@
-import Base:
-    collect, eltype, fetch, getproperty, isready, iterate, length, names, propertynames, show, wait
-import SentinelArrays
-import TableOperations
-import Tables
-
-export DTable, tabletype, tabletype!, trim, trim!, leftjoin, innerjoin, DTableColumn
-
 const VTYPE = Vector{Union{Dagger.Chunk,Dagger.EagerThunk}}
 
 """
@@ -20,7 +12,7 @@ the underlying partitions was applied to it (currently only `filter`).
 mutable struct DTable
     chunks::VTYPE
     tabletype
-    schema::Union{Nothing,Tables.Schema}
+    schema::Union{Nothing,Schema}
 end
 
 DTable(chunks::Vector, tabletype) = DTable(VTYPE(chunks), tabletype, nothing)
@@ -30,15 +22,15 @@ DTable(chunks::Vector, tabletype, schema) = DTable(VTYPE(chunks), tabletype, sch
     DTable(table; tabletype=nothing) -> DTable
 
 Constructs a `DTable` using a `Tables.jl`-compatible input `table`.
-Calls `Tables.partitions` on `table` and assumes the provided partitioning.
+Calls `partitions` on `table` and assumes the provided partitioning.
 """
 function DTable(table; tabletype=nothing)
     chunks = Vector{Dagger.Chunk}()
     type = nothing
     sink = nothing
-    for partition in Tables.partitions(table)
+    for partition in partitions(table)
         if sink === nothing
-            sink = Tables.materializer(tabletype !== nothing ? tabletype() : partition)
+            sink = materializer(tabletype !== nothing ? tabletype() : partition)
         end
 
         tpart = sink(partition)
@@ -73,25 +65,25 @@ function DTable(table, chunksize::Integer; tabletype=nothing, interpartition_mer
     leftovers = nothing
     leftovers_length = 0
 
-    for partition in Tables.partitions(table)
+    for partition in partitions(table)
         if sink === nothing
-            sink = Tables.materializer(tabletype !== nothing ? tabletype() : partition)
+            sink = materializer(tabletype !== nothing ? tabletype() : partition)
         end
 
         if interpartition_merges && leftovers !== nothing
-            inner_partitions = Tables.partitions(
+            inner_partitions = partitions(
                 TableOperations.makepartitions(sink(partition), chunksize - leftovers_length)
             )
 
             merged_data = sink(
                 TableOperations.joinpartitions(
-                    Tables.partitioner(identity, [leftovers, sink(first(inner_partitions))])
+                    partitioner(identity, [leftovers, sink(first(inner_partitions))])
                 ),
             )
 
             if length(inner_partitions) == 1
                 leftovers = merged_data
-                leftovers_length = Tables.length(Tables.rows(leftovers))
+                leftovers_length = length(rows(leftovers))
                 if leftovers_length == chunksize
                     # sometimes the next partition will be exactly the size of
                     # the chunksize - leftovers_length, so perfect match
@@ -105,28 +97,26 @@ function DTable(table, chunksize::Integer; tabletype=nothing, interpartition_mer
                 leftovers = nothing
                 leftovers_length = 0
                 partition = TableOperations.joinpartitions(
-                    Tables.partitioner(identity, Iterators.drop(inner_partitions, 1))
+                    partitioner(identity, Iterators.drop(inner_partitions, 1))
                 )
             end
         end
 
-        inner_partitions = Tables.partitions(
-            TableOperations.makepartitions(sink(partition), chunksize)
-        )
+        inner_partitions = partitions(TableOperations.makepartitions(sink(partition), chunksize))
 
         for inner_partition in inner_partitions
             chunk_data = sink(inner_partition)
-            chunk_data_rows = Tables.rows(chunk_data)
+            chunk_data_rows = rows(chunk_data)
 
             if (
                 interpartition_merges &&
                 Base.haslength(chunk_data_rows) &&
-                Tables.length(chunk_data_rows) < chunksize
+                length(chunk_data_rows) < chunksize
             )
                 # this is the last chunk with fewer than requested records
                 # merge it with the first of the next partition
                 leftovers = chunk_data
-                leftovers_length = Tables.length(chunk_data_rows)
+                leftovers_length = length(chunk_data_rows)
             else
                 push!(chunks, Dagger.tochunk(chunk_data))
             end
@@ -158,7 +148,7 @@ end
 
 function _file_load(filename::AbstractString, loader_function::Function, tabletype::Any)
     part = loader_function(filename)
-    sink = Tables.materializer(tabletype === nothing ? part : tabletype())
+    sink = materializer(tabletype === nothing ? part : tabletype())
     tpart = sink(part)
     return tpart
 end
@@ -172,7 +162,7 @@ instance of the underlying table type.
 Fetching an empty DTable results in returning an empty `NamedTuple` regardless of the underlying `tabletype`.
 """
 function fetch(d::DTable)
-    sink = Tables.materializer(tabletype(d)())
+    sink = materializer(tabletype(d)())
     return sink(retrieve_partitions(d))
 end
 
@@ -187,7 +177,7 @@ fetch(d::DTable, sink) = sink(retrieve_partitions(d))
 function retrieve_partitions(d::DTable)
     d2 = trim(d)
     return if nchunks(d2) > 0
-        TableOperations.joinpartitions(Tables.partitioner(retrieve, d2.chunks))
+        TableOperations.joinpartitions(partitioner(retrieve, d2.chunks))
     else
         NamedTuple()
     end
@@ -229,7 +219,7 @@ function resolve_tabletype(d::DTable)
 end
 
 function isnonempty(chunk)
-    return length(Tables.rows(chunk)) > 0 && length(Tables.columnnames(chunk)) > 0
+    return length(rows(chunk)) > 0 && length(columnnames(chunk)) > 0
 end
 
 """
@@ -260,7 +250,7 @@ function show(io::IO, ::MIME"text/plain", d::DTable)
 end
 
 function chunk_lengths(table::DTable)
-    f = x -> length(Tables.rows(x))
+    f = x -> length(rows(x))
     return fetch.([Dagger.@spawn f(c) for c in table.chunks])
 end
 
@@ -276,27 +266,31 @@ end
 @inline nchunks(d::DTable) = length(d.chunks)
 
 function merge_chunks(sink, chunks)
-    return sink(TableOperations.joinpartitions(Tables.partitioner(retrieve, chunks)))
+    return sink(TableOperations.joinpartitions(partitioner(retrieve, chunks)))
 end
 
-Base.names(dt::DTable) = string.(columnnames_svector(dt))
-Base.propertynames(dt::DTable) = columnnames_svector(dt)
+names(dt::DTable) = string.(columnnames_svector(dt))
+propertynames(dt::DTable) = columnnames_svector(dt)
 
-function Base.wait(dt::DTable)
+function wait(dt::DTable)
     for ch in dt.chunks
         !(ch isa Dagger.Chunk) && wait(ch)
     end
     return nothing
 end
 
-function Base.isready(dt::DTable)
+function isready(dt::DTable)
     return all([ch isa Dagger.Chunk ? true : (isready(ch); true) for ch in dt.chunks])
 end
 
-function Base.getproperty(dt::DTable, s::Symbol)
+function getproperty(dt::DTable, s::Symbol)
     if s in fieldnames(DTable)
         return getfield(dt, s)
     else
         return DTableColumn(dt, s)
     end
 end
+
+ncol(d::DTable) = length(columns(d))
+nrow(d::DTable) = length(d)
+index(df::DTable) = Index(columnnames_svector(df))

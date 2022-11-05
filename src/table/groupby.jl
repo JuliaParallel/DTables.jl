@@ -33,7 +33,7 @@ Grouped by: [:a]
 ```
 """
 function groupby(d::DTable, col::Symbol; merge=true, chunksize=0)
-    rowmap = (_row, _col) -> Tables.getcolumn(_row, _col)
+    rowmap = (_row, _col) -> getcolumn(_row, _col)
     rowmap_w_cols = _row -> rowmap(_row, col)
     return _groupby(d, rowmap_w_cols, [col], merge, chunksize)
 end
@@ -69,7 +69,7 @@ Grouped by: [:a, :b]
 ```
 """
 function groupby(d::DTable, cols::Vector{Symbol}; merge=true, chunksize=0)
-    rowmap = (_row, _cols) -> (; [c => Tables.getcolumn(_row, c) for c in _cols]...)
+    rowmap = (_row, _cols) -> (; [c => getcolumn(_row, c) for c in _cols]...)
     rowmap_w_cols = _row -> rowmap(_row, cols)
     return _groupby(d, rowmap_w_cols, cols, merge, chunksize)
 end
@@ -139,28 +139,28 @@ end
 Takes a partition and groups its rows according based on the key value returned by `f`.
 """
 function distinct_partitions(chunk, f::Function)
-    rows = Tables.rows(chunk)
-    keyval = f(iterate(rows)[1])
+    _rows = rows(chunk)
+    keyval = f(iterate(_rows)[1])
 
     return _distinct_partitions_iterate(chunk, f, keyval)
 end
 
 function _distinct_partitions_iterate(chunk, f, keyval::T) where {T}
-    rows = Tables.rows(chunk)
-    acc = Dict{T,Vector{eltype(rows)}}()
+    _rows = rows(chunk)
+    acc = Dict{T,Vector{eltype(_rows)}}()
 
-    for row in rows
+    for row in _rows
         key = convert(T, f(row))
-        v = get!(acc, key, Vector{eltype(rows)}())
+        v = get!(acc, key, Vector{eltype(_rows)}())
         push!(v, row)
     end
 
     return Vector{Pair{T,Dagger.Chunk}}([
-        x => Dagger.tochunk(Tables.columntable(acc[x])) for x in collect(keys(acc))
+        x => Dagger.tochunk(columntable(acc[x])) for x in collect(keys(acc))
     ])
 end
 
-rowcount(chunk) = length(Tables.rows(chunk))
+rowcount(chunk) = length(rows(chunk))
 
 """
     build_groupby_index(merge::Bool, chunksize::Int, tabletype, vs...)
@@ -195,7 +195,7 @@ function build_groupby_index(merge::Bool, chunksize::Int, tabletype, spawner_out
     v1 = nothing
 
     if merge && chunksize <= 0 # merge all partitions into one
-        sink = Tables.materializer(tabletype())
+        sink = materializer(tabletype())
         merged_chunks = Vector{Union{Dagger.EagerThunk,Dagger.Chunk}}()
         sizehint!(merged_chunks, length(keys(idx)))
 
@@ -216,7 +216,7 @@ function build_groupby_index(merge::Bool, chunksize::Int, tabletype, spawner_out
         return new_idx, merged_chunks
 
     elseif merge && chunksize > 0 # merge all but try to merge all the small chunks into chunks of chunksize
-        sink = Tables.materializer(tabletype())
+        sink = materializer(tabletype())
         merged_chunks = Vector{Union{Dagger.EagerThunk,Dagger.Chunk}}()
 
         all_lengths = [Dagger.@spawn rowcount(c) for c in chunks]
@@ -234,9 +234,11 @@ function build_groupby_index(merge::Bool, chunksize::Int, tabletype, spawner_out
             prev_r = r
 
             while l <= r
-                if _lengths[l] >= chunksize || # chunk already bigger than minimum, so move forward
+                if (
+                    _lengths[l] >= chunksize || # chunk already bigger than minimum, so move forward
                     _lengths[l] + _lengths[r] > chunksize || # potential merge would be bigger, so move forward
                     l == r # last iteration to push last chunk and trigger the last merge
+                )
                     _chunk = chunks[_indices[l]]
                     if r < prev_r # only condition for merging
                         chunks_to_merge = getindex.(Ref(chunks), _indices[(r + 1):prev_r])
