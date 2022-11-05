@@ -13,8 +13,8 @@ using SentinelArrays: ChainedVector
         df = fetch(dt, DataFrame)
 
         t = (args...) -> begin
-            dt_01 = DTables.select(dt, args...)
-            df_01 = DataFrames.select(df, args...)
+            dt_01 = select(dt, args...)
+            df_01 = select(df, args...)
 
             result = try
                 all(isapprox.(Tables.columns(df_01), Tables.columns(fetch(dt_01, DataFrame))))
@@ -49,7 +49,7 @@ using SentinelArrays: ChainedVector
         # @test # t(AsTable([:a, :b]) => identity) # this should technically fail on DTables
         @test t(AsTable([:a, :b]) => identity => AsTable)
         @test t([] => ByRow(() -> 1) => :x)
-        @test fetch(DTables.select(dt, [] => ByRow(rand) => :x)).x isa ChainedVector{Float64, Vector{Float64}}
-        @test fetch(DTables.select(dt, [] => (() -> rand(s)) => :x)).x isa ChainedVector{Float64, Vector{Float64}}
+        @test fetch(select(dt, [] => ByRow(rand) => :x)).x isa ChainedVector{Float64, Vector{Float64}}
+        @test fetch(select(dt, [] => (() -> rand(s)) => :x)).x isa ChainedVector{Float64, Vector{Float64}}
     end
 end

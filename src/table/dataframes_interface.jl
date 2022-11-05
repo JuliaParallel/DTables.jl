@@ -1,129 +1,37 @@
-function make_pair_concrete(@nospecialize(x::Pair))
-    return make_pair_concrete(x.first) => make_pair_concrete(x.second)
+struct DTableAbstractDataFrameWrapper <: AbstractDataFrame
+    d::DTable
 end
-make_pair_concrete(@nospecialize(x)) = x
 
-broadcast_pair(df::DTable, @nospecialize(p::Any)) = p
+broadcast_pair(df::DTable, p) = broadcast_pair(DTableAbstractDataFrameWrapper(df), p)
+
+# Not copied - full custom implementation
+# There's a copymetadata here now
+function manipulate(
+    dt::DTable, args::AbstractVector{Int}; copycols::Bool, keeprows::Bool, renamecols::Bool
+)
+    colidx = first(args)
+    colname = columnnames(columns(dt))[colidx]
+    return map(r -> (; colname => getcolumn(r, colidx)), dt)
+end
 
 # Copied as is from DataFrames.jl
-function broadcast_pair(df::DTable, @nospecialize(p::Pair))
-    src, second = p
-    src_broadcast = src isa Union{BroadcastedInvertedIndex,BroadcastedSelector}
-    second_broadcast = second isa Union{BroadcastedInvertedIndex,BroadcastedSelector}
-    if second isa Pair
-        fun, dst = second
-        dst_broadcast = dst isa Union{BroadcastedInvertedIndex,BroadcastedSelector}
-        if src_broadcast || dst_broadcast
-            new_src = src_broadcast ? names(df, src.sel) : src
-            new_dst = dst_broadcast ? names(df, dst.sel) : dst
-            new_p = new_src .=> fun .=> new_dst
-            return isempty(new_p) ? [] : new_p
-        else
-            return p
-        end
+function manipulate(
+    df::DTable, c::MultiColumnIndex; copycols::Bool, keeprows::Bool, renamecols::Bool
+)
+    if c isa AbstractVector{<:Pair}
+        return manipulate(df, c...; copycols=copycols, keeprows=keeprows, renamecols=renamecols)
     else
-        if src_broadcast || second_broadcast
-            new_src = src_broadcast ? names(df, src.sel) : src
-            new_second = second_broadcast ? names(df, second.sel) : second
-            new_p = new_src .=> new_second
-            return isempty(new_p) ? [] : new_p
-        else
-            return p
-        end
+        return manipulate(
+            df, index(df)[c]; copycols=copycols, keeprows=keeprows, renamecols=renamecols
+        )
     end
 end
 
-# this is needed in broadcasting when one of dimensions has length 0
-# as then broadcasting produces Matrix{Any} rather than Matrix{<:Pair}
-broadcast_pair(df::DTable, @nospecialize(p::AbstractMatrix)) = isempty(p) ? [] : p
-
 # Copied as is from DataFrames.jl
-function broadcast_pair(df::DTable, @nospecialize(p::AbstractVecOrMat{<:Pair}))
-    isempty(p) && return []
-    need_broadcast = false
-
-    src = first.(p)
-    first_src = first(src)
-    if first_src isa Union{BroadcastedInvertedIndex,BroadcastedSelector}
-        if any(!=(first_src), src)
-            throw(
-                ArgumentError(
-                    "when broadcasting column selector it must " * "have a constant value"
-                ),
-            )
-        end
-        need_broadcast = true
-        new_names = names(df, first_src.sel)
-        if !(length(new_names) == size(p, 1) || size(p, 1) == 1)
-            throw(
-                ArgumentError(
-                    "broadcasted dimension does not match the " * "number of selected columns"
-                ),
-            )
-        end
-        new_src = new_names
-    else
-        new_src = src
-    end
-
-    second = last.(p)
-    first_second = first(second)
-    if first_second isa Union{BroadcastedInvertedIndex,BroadcastedSelector}
-        if any(!=(first_second), second)
-            throw(
-                ArgumentError(
-                    "when using broadcasted column selector it " * "must have a constant value"
-                ),
-            )
-        end
-        need_broadcast = true
-        new_names = names(df, first_second.sel)
-        if !(length(new_names) == size(p, 1) || size(p, 1) == 1)
-            throw(
-                ArgumentError(
-                    "broadcasted dimension does not match the " * "number of selected columns"
-                ),
-            )
-        end
-        new_second = new_names
-    else
-        if first_second isa Pair
-            fun, dst = first_second
-            if dst isa Union{BroadcastedInvertedIndex,BroadcastedSelector}
-                if !all(x -> x isa Pair && last(x) == dst, second)
-                    throw(
-                        ArgumentError(
-                            "when using broadcasted column selector " *
-                            "it must have a constant value",
-                        ),
-                    )
-                end
-                need_broadcast = true
-                new_names = names(df, dst.sel)
-                if !(length(new_names) == size(p, 1) || size(p, 1) == 1)
-                    throw(
-                        ArgumentError(
-                            "broadcasted dimension does not match the " *
-                            "number of selected columns",
-                        ),
-                    )
-                end
-                new_dst = new_names
-                new_second = first.(second) .=> new_dst
-            else
-                new_second = second
-            end
-        else
-            new_second = second
-        end
-    end
-
-    if need_broadcast
-        new_p = new_src .=> new_second
-        return isempty(new_p) ? [] : new_p
-    else
-        return p
-    end
+function manipulate(df::DTable, c::ColumnIndex; copycols::Bool, keeprows::Bool, renamecols::Bool)
+    return manipulate(
+        df, Int[index(df)[c]]; copycols=copycols, keeprows=keeprows, renamecols=renamecols
+    )
 end
 
 # Copied as is from DataFrames.jl
@@ -138,12 +46,10 @@ function manipulate(
             push!(cs_vec, v)
         end
     end
-    return _manipulate(
-        df,
-        Any[normalize_selection(index(df), make_pair_concrete(c), renamecols) for c in cs_vec],
-        copycols,
-        keeprows,
-    )
+    normalized_cs = Any[
+        normalize_selection(index(df), make_pair_concrete(c), renamecols) for c in cs_vec
+    ]
+    return _manipulate(df, normalized_cs, copycols, keeprows)
 end
 
 # Not copied - full custom implementation
@@ -216,35 +122,6 @@ function _manipulate(df::DTable, normalized_cs::Vector{Any}, copycols::Bool, kee
     return rd
 end
 
-# Not copied - full custom implementation
-function manipulate(
-    dt::DTable, args::AbstractVector{Int}; copycols::Bool, keeprows::Bool, renamecols::Bool
-)
-    colidx = first(args)
-    colname = columnnames(columns(dt))[colidx]
-    return map(r -> (; colname => getcolumn(r, colidx)), dt)
-end
-
-# Copied as is from DataFrames.jl
-function manipulate(
-    df::DTable, c::MultiColumnIndex; copycols::Bool, keeprows::Bool, renamecols::Bool
-)
-    if c isa AbstractVector{<:Pair}
-        return manipulate(df, c...; copycols=copycols, keeprows=keeprows, renamecols=renamecols)
-    else
-        return manipulate(
-            df, index(df)[c]; copycols=copycols, keeprows=keeprows, renamecols=renamecols
-        )
-    end
-end
-
-# Copied as is from DataFrames.jl
-function manipulate(df::DTable, c::ColumnIndex; copycols::Bool, keeprows::Bool, renamecols::Bool)
-    return manipulate(
-        df, Int[index(df)[c]]; copycols=copycols, keeprows=keeprows, renamecols=renamecols
-    )
-end
-
 """
     select(df::DTable, args...; copycols::Bool=true, renamecols::Bool=true)
 
@@ -259,7 +136,13 @@ please file an issue with reproduction steps and data.
 
 Please refer to DataFrames documentation for more details on usage.
 """
-function select(df::DTable, @nospecialize(args...); copycols::Bool=true, renamecols::Bool=true)
+function select(
+    df::DTable,
+    @nospecialize(args...);
+    copycols::Bool=true,
+    renamecols::Bool=true,
+    threads::Bool=true,
+)
     return manipulate(
         df,
         map(x -> broadcast_pair(df, x), args)...;
