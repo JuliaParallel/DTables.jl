@@ -33,7 +33,7 @@ function determine_schema(table::DTable)
     end
     c_idx = 1
     r = (false, nothing)
-    while !r[1] && c_idx <= length(table.chunks)
+    while !r[1] && table.chunks !== nothing && c_idx <= length(table.chunks)
         r = fetch(Dagger.spawn(chunk_f, table.chunks[c_idx]))
         c_idx += 1
     end
@@ -65,7 +65,7 @@ function _iterate(iter::DTableRowIterator, chunk_index)
     i = nothing
     row_iterator = nothing
     while i === nothing && chunk_index <= nchunks(iter.d)
-        partition = _retrieve(iter.d.chunks[chunk_index])
+        partition = retrieve(iter.d.chunks[chunk_index])
         row_iterator = Tables.rows(partition)
         i = iterate(row_iterator)
         chunk_index += 1
@@ -121,7 +121,7 @@ length(table::DTablePartitionIterator) = nchunks(table.d)
 
 function _iterate(table::DTablePartitionIterator, chunk_index)
     nchunks(table.d) < chunk_index && return nothing
-    return (_retrieve(table.d.chunks[chunk_index]), chunk_index + 1)
+    return (retrieve(table.d.chunks[chunk_index]), chunk_index + 1)
 end
 
 Base.iterate(table::DTablePartitionIterator) = _iterate(table, 1)

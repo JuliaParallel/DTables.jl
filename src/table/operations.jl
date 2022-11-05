@@ -27,9 +27,9 @@ julia> fetch(m)
 """
 function map(f, d::DTable)
     chunk_wrap = (_chunk, _f) -> begin
-        if isnonempty(_chunk)
-            m = TableOperations.map(_f, _chunk)
-            Tables.materializer(_chunk)(m)
+        return if isnonempty(_chunk)
+            sink = Tables.materializer(_chunk)
+            sink(TableOperations.map(_f, _chunk))
         else
             _chunk
         end
@@ -100,7 +100,7 @@ function reduce(
     # handle empty dtables
     nchunks(d) == 0 && return Dagger.@spawn NamedTuple()
 
-    columns = cols === nothing ? _columnnames_svector(d) : cols
+    columns = cols === nothing ? columnnames_svector(d) : cols
 
     chunk_reduce_results = _reduce_chunks(f, d.chunks, columns; init=init)
 
@@ -180,7 +180,7 @@ function reduce(
     # handle empty dtables
     nchunks(gd) == 0 && return Dagger.@spawn NamedTuple()
 
-    columns = cols === nothing ? _columnnames_svector(gd) : cols
+    columns = cols === nothing ? columnnames_svector(gd) : cols
 
     chunk_reduce_results = _reduce_chunks(f, gd.dtable.chunks, columns; init=init)
 
@@ -283,9 +283,9 @@ and `op` is the reduce function applied to the results of the mapping operation.
 
 # Examples
 
-julia> using Dagger, OnlineStats
+julia> using DTables, OnlineStats
 
-julia> fetch(Dagger.mapreduce(sum, fit!, d1, init = Mean()))
+julia> fetch(DTables.mapreduce(sum, fit!, d1, init = Mean()))
 Mean: n=100 | value=1.50573
 """
 

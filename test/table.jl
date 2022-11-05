@@ -91,6 +91,106 @@ using OnlineStats
         @test da.tabletype === NamedTuple
     end
 
+    @testset "constructors - interpartition merges" begin
+        size = 1_000
+        nt = (a = rand(size), b = rand(size))
+        partition_size = 100
+
+        ####################################################################################
+        # interpartition merges ON
+        ####################################################################################
+        # cases where there's no leftover chunk (exact split)
+        for m in [-50, 0, 100]
+            d = DTable(
+                TableOperations.makepartitions(nt, partition_size),
+                partition_size + m
+            )
+            @test DTables.nchunks(d) == size ÷ (partition_size + m)
+            @test DTables.chunk_lengths(d) == [
+                partition_size + m for
+                _ in 1:(size ÷ (partition_size + m))
+            ]
+        end
+
+        # cases with leftover chunk (smaller than chunksize)
+        for m in [-70, -20 ,20, 50, 110]
+            d = DTable(
+                TableOperations.makepartitions(nt, partition_size),
+                partition_size + m
+            )
+            @test DTables.nchunks(d) == size ÷ (partition_size + m) + 1
+            @test DTables.chunk_lengths(d) == [
+                [
+                    partition_size + m for
+                    _ in 1:(size ÷ (partition_size + m))
+                ]...,
+                size - (partition_size + m) * (size ÷ (partition_size + m))
+            ]
+        end
+
+
+        ####################################################################################
+        # interpartition merges OFF
+        ####################################################################################
+        # smaller than; exact
+        m = -75
+        d = DTable(
+            TableOperations.makepartitions(nt, partition_size),
+            partition_size + m;
+            interpartition_merges=false,
+        )
+        @test DTables.nchunks(d) == size ÷ (partition_size + m)
+        @test DTables.chunk_lengths(d) == [
+            partition_size + m for
+            _ in 1:(size ÷ (partition_size + m))
+        ]
+
+        # smaller than; inexact
+        m = -70
+        d = DTable(
+            TableOperations.makepartitions(nt, partition_size),
+            partition_size + m;
+            interpartition_merges=false,
+        )
+        @test DTables.nchunks(d) == 40
+        @test DTables.chunk_lengths(d) == repeat([30,30,30,10], 10)
+
+
+        # same size
+        m = 0
+        d = DTable(
+            TableOperations.makepartitions(nt, partition_size),
+            partition_size + m;
+            interpartition_merges=false,
+        )
+        @test DTables.nchunks(d) == size ÷ (partition_size + m)
+        @test DTables.chunk_lengths(d) == [
+            partition_size + m for
+            _ in 1:(size ÷ (partition_size + m))
+        ]
+
+        # larger exact
+        m = 100
+        d = DTable(
+            TableOperations.makepartitions(nt, partition_size),
+            partition_size + m;
+            interpartition_merges=false,
+        )
+        @test DTables.nchunks(d) == 10
+        @test DTables.chunk_lengths(d) == repeat([100], 10)
+
+        # larger inexact
+
+        m = 37
+        d = DTable(
+            TableOperations.makepartitions(nt, partition_size),
+            partition_size + m;
+            interpartition_merges=false,
+        )
+        @test DTables.nchunks(d) == 10
+        @test DTables.chunk_lengths(d) == repeat([100], 10)
+    end
+
     @testset "map" begin
         size = 1_000
         nt = (a = rand(size), b = rand(size))
@@ -256,7 +356,7 @@ using OnlineStats
 
         for kwargs in kwargs_set
             g = DTables.groupby(d, :a; kwargs...)
-            c = DTables._retrieve.(g.dtable.chunks)
+            c = DTables.retrieve.(g.dtable.chunks)
             @test all([all(t.a[1] .== t.a) for t in c])
             @test all(getindex.(getproperty.(c, :a), 1) .∈ Ref(charset))
             @test sort(collect(fetch(d).a)) == sort(collect(fetch(g).a))
@@ -268,7 +368,7 @@ using OnlineStats
 
         for kwargs in kwargs_set
             g = DTables.groupby(d, [:a, :b]; kwargs...)
-            c = DTables._retrieve.(g.dtable.chunks)
+            c = DTables.retrieve.(g.dtable.chunks)
             @test all([all(t.a[1] .== t.a) for t in c])
             @test all([all(t.b[1] .== t.b) for t in c])
             @test all(getindex.(getproperty.(c, :a), 1) .∈ Ref(charset))
@@ -289,7 +389,7 @@ using OnlineStats
         f2 = x -> x % 10
         for kwargs in kwargs_set
             g = DTables.groupby(d, f1)
-            c = DTables._retrieve.(g.dtable.chunks)
+            c = DTables.retrieve.(g.dtable.chunks)
             @test all([all(f2(t.a[1]) .== f2.(t.a)) for t in c])
             @test all(getindex.(getproperty.(c, :a), 1) .∈ Ref(intset))
             @test sort(collect(fetch(d).a)) == sort(collect(fetch(g).a))
@@ -307,7 +407,7 @@ using OnlineStats
         for key in keys(g.index)
             chunk_indices = g.index[key]
             chunks = getindex.(Ref(g.dtable.chunks), chunk_indices)
-            parts = DTables._retrieve.(chunks)
+            parts = DTables.retrieve.(chunks)
 
             @test all([all(key .== p.a) for p in parts])
         end
@@ -327,7 +427,7 @@ using OnlineStats
         for key in keys(m.index)
             chunk_indices = m.index[key]
             chunks = getindex.(Ref(m.dtable.chunks), chunk_indices)
-            parts = DTables._retrieve.(chunks)
+            parts = DTables.retrieve.(chunks)
             @test all([all((key + 3) .== p.result) for p in parts])
             @test all(fetch(m[key]).a .== key)
         end
@@ -348,53 +448,6 @@ using OnlineStats
 
         trim!(f)
         @test ['c', 'd'] ∉ collect(keys(f.index))
-    end
-
-    @testset "tables.jl source" begin
-        nt = (a=1:100, b=1:100)
-
-        d1 = DTable(nt, 10) # standard row based constructor
-
-        # partition constructor, check with DTable as input
-        d2 = DTable(d1)
-        d3 = DTable(Tables.partitioner(identity, [nt for _ in 1:10]))
-
-        @test length(d1.chunks) == length(d2.chunks) == length(d3.chunks)
-
-        @test Tables.getcolumn(d1, 1) == 1:100
-        @test Tables.getcolumn(d1, 2) == 1:100
-        @test Tables.getcolumn(d1, :a) == 1:100
-        @test Tables.getcolumn(d1, :b) == 1:100
-        @test DTables.determine_columnnames(d1) == (:a, :b)
-
-        @test DTables.determine_schema(d1).names == (:a, :b)
-        @test DTables.determine_schema(d1).types == (Int, Int)
-
-        for c in Tables.columns(d1)
-            @test c == 1:100
-        end
-
-        @test all([ r.a == r.b == v for (r,v) in zip(collect(Tables.rows(d1)),1:100)])
-
-        # length tests for collect on iterators
-        @test length(d1) == 100
-        @test length(Tables.rows(d1)) == 100
-        @test length(Tables.columns(d1)) == 2
-        @test length(Tables.partitions(d1)) == 10
-
-        # GDTable things
-
-        g = DTables.groupby(d1, r -> r.a % 10, chunksize=3)
-        t1 = Tables.columntable(Tables.rows(g))
-        @test 1:100 == sort(t1.a) == sort(t1.b)
-        t2 = collect(Tables.columns(g))
-        @test 1:100 == sort(t2[1]) == sort(t2[2])
-
-        for partition in Tables.partitions(g)
-            @test partition isa DTable
-            v = Tables.getcolumn(partition, :a)[1]
-            @test all([el%10 == v%10 for el in Tables.getcolumn(partition, :a)])
-        end
     end
 
     @testset "join" begin
@@ -484,5 +537,23 @@ using OnlineStats
             # @test isequal(ij1, ij10)
             @test isequal(ij1, ij11)
         end
+    end
+
+    @testset "utilities" begin
+        nt = (; a=[1,2,3], b=[1,2,3])
+
+        d = DTable(nt, 1)
+
+        @test names(d) == ["a", "b"]
+        @test propertynames(d) == [:a, :b]
+        @test wait(d) === nothing
+        @test isready(d)
+
+
+        m = map(x-> (ab=x.a + x.b,), d)
+        @test wait(m) === nothing
+        @test isready(m)
+        @test names(m) == ["ab"]
+        @test propertynames(m) == [:ab]
     end
 end

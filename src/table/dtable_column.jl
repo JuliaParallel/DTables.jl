@@ -27,12 +27,12 @@ function DTableColumn(d::DTable, col::Int)
     end
 
     return DTableColumn{column_eltype,iterator_type}(
-        d, col, _columnnames_svector(d)[col], chunk_lengths(d), 0, nothing, nothing
+        d, col, columnnames_svector(d)[col], chunk_lengths(d), 0, nothing, nothing
     )
 end
 
 function DTableColumn(d::DTable, col::String)
-    return DTableColumn(d, only(indexin([col], string.(_columnnames_svector(d)))))
+    return DTableColumn(d, only(indexin([col], string.(columnnames_svector(d)))))
 end
 DTableColumn(d::DTable, col::Symbol) = DTableColumn(d, string(col))
 
@@ -75,3 +75,6 @@ function iterate(dtc::DTableColumn, iter)
     pull_next_chunk!(dtc)
     return dtc._iter
 end
+
+Base.eltype(dtc::DTableColumn) = Tables.schema(Tables.columns(dtc.dtable)).types[dtc.col]
+Base.collect(dtc::DTableColumn) = _getcolumn(dtc.dtable, dtc.col)
