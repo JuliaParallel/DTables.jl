@@ -66,12 +66,12 @@ export DTable, DTableColumn, innerjoin, leftjoin, select, tabletype, tabletype!,
 include("table/dtable.jl")
 include("table/gdtable.jl")
 include("table/tables.jl")
-include("table/operations.jl")
-include("table/groupby.jl")
-include("table/join_interface.jl")
-include("table/join.jl")
+include("operations/operations.jl")
+include("operations/groupby.jl")
+include("operations/join_interface.jl")
+include("operations/join.jl")
 include("table/dtable_column.jl")
-include("table/dataframes_interface_utils.jl")
-include("table/dataframes_interface.jl")
+include("operations/dataframes_interface_utils.jl")
+include("operations/dataframes_interface.jl")
 
 end
