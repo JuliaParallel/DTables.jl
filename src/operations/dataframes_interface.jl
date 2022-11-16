@@ -1,8 +1,3 @@
-struct DTableAbstractDataFrameWrapper <: AbstractDataFrame
-    d::DTable
-end
-
-broadcast_pair(df::DTable, p) = broadcast_pair(DTableAbstractDataFrameWrapper(df), p)
 
 # Not copied - full custom implementation
 # There's a copymetadata here now

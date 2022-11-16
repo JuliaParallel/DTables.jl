@@ -6,19 +6,19 @@ module DTables
 
 using Dagger: Dagger
 using DataAPI: BroadcastedSelector
-using DataFrames:
-    AbstractDataFrame,
-    AsTable,
-    ByRow,
-    ColumnIndex,
-    MultiColumnIndex,
-    normalize_selection,
-    Index,
-    make_pair_concrete
+# using DataFrames:
+#     AbstractDataFrame,
+#     AsTable,
+#     ColumnIndex,
+#     MultiColumnIndex,
+#     normalize_selection,
+#     Index,
+#     make_pair_concrete
 using InvertedIndices: BroadcastedInvertedIndex
 using SentinelArrays: ChainedVector
 using TableOperations: TableOperations
 using Tables:
+    ByRow,
     columnindex,
     columnnames,
     columns,
@@ -53,15 +53,24 @@ import Base:
 import DataAPI: leftjoin, ncol, nrow, innerjoin
 import Tables:
     columnaccess, columnnames, columns, getcolumn, istable, partitions, rowaccess, rows, schema
-import DataFrames: broadcast_pair, select
+# import DataFrames: broadcast_pair, select
 
 ############################################################################################
 # Export
 ############################################################################################
 
-export DTable, DTableColumn, innerjoin, leftjoin, select, tabletype, tabletype!, trim, trim!
+export DTable, DTableColumn, innerjoin, leftjoin, tabletype, tabletype!, trim, trim!, ByRow, ncol, nrow
 
 ############################################################################################
+
+include("new_module_index/SeparateModuleIndex.jl")
+using .SeparateModuleIndex: Index, MultiColumnIndex, ColumnIndex, AsTable
+import .SeparateModuleIndex: index
+
+include("new_module/SeparateModule.jl")
+using .SeparateModule
+import .SeparateModule: normalize_selection
+
 
 include("table/dtable.jl")
 include("table/gdtable.jl")
