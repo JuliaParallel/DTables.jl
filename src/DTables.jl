@@ -50,18 +50,15 @@ import Tables:
 # Export
 ############################################################################################
 
-export DTable, DTableColumn, innerjoin, leftjoin, tabletype, tabletype!, trim, trim!, ByRow, ncol, nrow, Not
+export DTable,
+    DTableColumn, innerjoin, leftjoin, tabletype, tabletype!, trim, trim!, ByRow, ncol, nrow, Not
 
 ############################################################################################
 
 include("new_module_index/SeparateModuleIndex.jl")
-using .SeparateModuleIndex: Index, MultiColumnIndex, ColumnIndex, AsTable
-import .SeparateModuleIndex: index
-
-include("new_module/SeparateModule.jl")
-using .SeparateModule
-import .SeparateModule: normalize_selection
-
+using .SeparateModuleIndex:
+    Index, MultiColumnIndex, ColumnIndex, AsTable, broadcast_pair, make_pair_concrete
+import .SeparateModuleIndex: index, normalize_selection
 
 include("table/dtable.jl")
 include("table/gdtable.jl")
