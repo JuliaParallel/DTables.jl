@@ -270,6 +270,7 @@ function merge_chunks(sink, chunks)
 end
 
 names(dt::DTable) = string.(columnnames_svector(dt))
+names(dt::DTable, cols) = names(empty_dataframe(dt), cols)
 propertynames(dt::DTable) = columnnames_svector(dt)
 
 function wait(dt::DTable)
@@ -294,3 +295,11 @@ end
 ncol(d::DTable) = length(columns(d))
 nrow(d::DTable) = length(d)
 index(df::DTable) = Index(columnnames_svector(df))
+
+function empty_dataframe(dt::DTable)
+    s = determine_schema(dt)
+    return DataFrame(
+        Pair{Symbol}[s.names[i] => s.types[i][] for i in eachindex(s.names, s.types)];
+        copycols=false,
+    )
+end
