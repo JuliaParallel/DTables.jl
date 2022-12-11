@@ -52,4 +52,13 @@ using SentinelArrays: ChainedVector
         @test fetch(select(dt, [] => ByRow(rand) => :x)).x isa ChainedVector{Float64, Vector{Float64}}
         @test fetch(select(dt, [] => (() -> rand(s)) => :x)).x isa ChainedVector{Float64, Vector{Float64}}
     end
+
+    @testset "names" begin
+        v = DTable((a=[1], x1=[2], x2=[3], x3=[4], x4=[5]))
+        @test names(v, All()) == names(v, :) == names(v) == ["a", "x1", "x2", "x3", "x4"]
+        @test names(v, Between(:x1, :x3)) == ["x1", "x2", "x3"]
+        @test names(v, Not(:a)) == names(v, r"x") == ["x1", "x2", "x3", "x4"]
+        @test names(v, :x1) == names(v, 2) == ["x1"]
+        @test names(v, Cols()) == names(v, Cols()) == []
+    end
 end
