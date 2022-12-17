@@ -147,3 +147,25 @@ function select(
         renamecols=renamecols,
     )
 end
+
+function transform(
+    df::DTable,
+    @nospecialize(args...);
+    copycols::Bool=true,
+    renamecols::Bool=true,
+    threads::Bool=true,
+)
+    return select(df, :, args...; copycols=copycols, renamecols=renamecols, threads=threads)
+end
+
+function combine(
+    df::DTable, @nospecialize(args...); renamecols::Bool=true, threads::Bool=true
+)
+    return manipulate(
+        df,
+        map(x -> broadcast_pair(df, x), args)...;
+        copycols=true,
+        keeprows=false,
+        renamecols=renamecols,
+    )
+end
