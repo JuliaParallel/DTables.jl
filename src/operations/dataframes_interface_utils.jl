@@ -34,23 +34,37 @@ function select_rowfunction(row, mappable_part_of_normalized_cs, colresults)
 end
 
 function fillcolumns(
-    dt::DTable, ics::Dict{Int,Any}, normalized_cs, chunk_lengths_of_original_dt::Vector{Int}
+    dt::DTable,
+    ics::Dict{Int,Any},
+    normalized_cs::Vector{Any},
+    chunk_lengths_of_original_dt::Vector{Int},
+    col_lengths::Vector{Int},
 )
     col_keys_indices = collect(keys(ics))::Vector{Int}
     col_vecs = map(x -> ics[x], col_keys_indices)::Union{Vector{Any},Vector{Dagger.EagerThunk}}
 
     f =
-        (ch, csymbols, colfragments) -> begin
+        (ch, csymbols, colfragments, expected_chunk_length) -> begin
             col_vecs_fetched = fetch.(colfragments)
             colnames = Vector{Symbol}()
             cols = Vector{Any}()
             last_astable = 0
 
+            # if any(length.(col_vecs_fetched) .== 1)
+            #     @warn "skip"
+            #     return NamedTuple()
+            # end
+            # return NamedTuple()
             for (idx, (_, (_, sym))) in enumerate(normalized_cs)
                 if sym !== AsTable
                     col = if sym in csymbols
                         index = something(indexin(csymbols, [sym])...)
-                        col_vecs_fetched[index]
+                        if col_vecs_fetched[index] isa AbstractVector
+                            col_vecs_fetched[index]
+                        else
+                            repeat([col_vecs_fetched[index]], expected_chunk_length)
+                        end
+
                     else
                         getcolumn(ch, sym)
                     end
@@ -62,7 +76,11 @@ function fillcolumns(
                         c = getcolumn(ch, Symbol("AsTable$(idx)"))
                     else
                         last_astable = i
-                        c = col_vecs_fetched[i]
+                        c = if col_vecs_fetched[i] isa AbstractVector
+                            col_vecs_fetched[i]
+                        else
+                            repeat([col_vecs_fetched[i]], expected_chunk_length)
+                        end
                     end
 
                     push!.(Ref(colnames), columnnames(columns(c)))
@@ -79,16 +97,19 @@ function fillcolumns(
     colfragment = (column, s, e) -> Dagger.@spawn getindex(column, s:e)
     clenghts = chunk_lengths_of_original_dt
     result_column_symbols = getindex.(Ref(map(x -> x[2][2], normalized_cs)), col_keys_indices)
-
     chunks = [
         begin
             cfrags = [
-                colfragment(column, 1 + sum(clenghts[1:(i - 1)]), sum(clenghts[1:i])) for
-                column in col_vecs
+                begin
+                    if len > 1
+                        colfragment(column, 1 + sum(clenghts[1:(i - 1)]), sum(clenghts[1:i]))
+                    else
+                        column
+                    end
+                end for (column, len) in zip(col_vecs, col_lengths)
             ]
-            Dagger.@spawn f(ch, result_column_symbols, cfrags)
-        end for (i, ch) in enumerate(dt.chunks)
+            Dagger.@spawn f(ch, result_column_symbols, cfrags, lens)
+        end for (i, (ch, lens)) in enumerate(zip(dt.chunks, clenghts))
     ]
-
     return DTable(chunks, dt.tabletype)
 end

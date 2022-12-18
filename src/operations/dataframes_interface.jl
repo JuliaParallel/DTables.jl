@@ -54,27 +54,38 @@ function _manipulate(df::DTable, normalized_cs::Vector{Any}, copycols::Bool, kee
     # STAGE 1: Spawning full column thunks - also multicolumn when needed (except identity)
     # These get saved later and used in last stages.
     #########
-    colresults = Dict{Int,Any}()
-    for (i, (colidx, (f, _))) in enumerate(normalized_cs)
-        if !(colidx isa AsTable) && !(f isa ByRow) && f != identity
-            if length(colidx) > 0
-                cs = DTableColumn.(Ref(df), [colidx...])
-                colresults[i] = Dagger.@spawn f(cs...)
+    normalized_cs_results = Dict{Int,Any}()
+    for (idx, (column_index, (fun, result_column_symbol))) in enumerate(normalized_cs)
+        if (
+            !(column_index isa AsTable) &&
+            !(fun isa ByRow) &&
+            fun != identity
+        )
+            if length(column_index) > 0
+                normalized_cs_results[idx] = Dagger.@spawn fun(DTableColumn.(Ref(df), [column_index...])...)
             else
-                colresults[i] = Dagger.@spawn f() # case of select(d, [] => fun)
+                # case of select(d, [] => fun) where there are no input columns
+                normalized_cs_results[idx] = Dagger.@spawn fun()
             end
         end
     end
+    # return normalized_cs_results
 
     #########
     # STAGE 2: Fetching full column thunks with result of length 1
     # These will be just injected as values in the mapping, because it's a vector full of these values
     #########
 
-    colresults = Dict{Int,Any}(
-        k => fetch(Dagger.spawn(length, v)) == 1 ? fetch(v) : v for (k, v) in colresults
-    )
+    # colresults = Dict{Int,Any}(
+    #     normalized_cs_index => fetch(Dagger.spawn(length, result_thunk)) == 1 ? fetch(result_thunk) : result_thunk
+    #     for (normalized_cs_index, result_thunk) in normalized_cs_results
+    # )
+    colresults = normalized_cs_results
 
+    # mapmask = [
+    #     haskey(colresults, x) && colresults[x] isa Dagger.EagerThunk for
+    #     (x, _) in enumerate(normalized_cs)
+    # ]
     mapmask = [
         haskey(colresults, x) && colresults[x] isa Dagger.EagerThunk for
         (x, _) in enumerate(normalized_cs)
@@ -87,7 +98,6 @@ function _manipulate(df::DTable, normalized_cs::Vector{Any}, copycols::Bool, kee
     # It's awful right now, but it covers all cases
     # Essentially we skip all the non-mappable stuff here
     #########
-
     rd = map(x -> select_rowfunction(x, mappable_part_of_normalized_cs, colresults), df)
 
     #########
@@ -101,19 +111,50 @@ function _manipulate(df::DTable, normalized_cs::Vector{Any}, copycols::Bool, kee
         end
     end
 
-    for (_, v) in colresults
-        if v isa Dagger.EagerThunk
-            if fetch(Dagger.spawn(length, v)) != length(df)
-                throw("result column is not the size of the table")
-            end
-        end
+    has_any_mappable = length(mappable_part_of_normalized_cs) > 0
+    fullcolumn_ops_length = Int[fetch(Dagger.spawn(length, v)) for v in values(colresults)]
+
+    collength_to_compare_against = if has_any_mappable || keeprows
+        length(df)
+    else
+        maximum(fullcolumn_ops_length)
     end
+
+    if !all(map( x -> x == 1 || x == collength_to_compare_against, fullcolumn_ops_length))
+        throw(ArgumentError("New columns must have the same length as old columns"))
+    end
+
     #########
     # STAGE 5: Fill columns - meaning the previously omitted full column tasks
     # will be now merged into the final DTable
     #########
 
-    rd = fillcolumns(rd, cpcolresults, normalized_cs, chunk_lengths(df))
+    new_chunk_lengths = if has_any_mappable || keeprows
+        chunk_lengths(df)
+    elseif maximum(fullcolumn_ops_length) == 1
+        vcat(ones(Int,1), zeros(Int,nchunks(df) - 1))
+    else
+        b = maximum(fullcolumn_ops_length)
+        a = zeros(Int,nchunks(df))
+        for (i,c) in enumerate(chunk_lengths(df))
+            if b>= c
+                a[i] += c
+                b -= c
+            else
+                a[i] += b
+                b = 0
+            end
+        end
+        if b > 0
+            a[end] += b # fix this - leftover is just added at the end
+        end
+        a
+    end
+
+
+
+
+    rd = fillcolumns(rd, cpcolresults, normalized_cs, new_chunk_lengths, fullcolumn_ops_length)
 
     return rd
 end

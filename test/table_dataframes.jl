@@ -7,7 +7,7 @@ using SentinelArrays: ChainedVector
 
 @testset "dtable-dataframes" begin
     @testset "select" begin
-        s = 100_000
+        s = 10_000
         nt = (a=collect(1:s) .% 3, b=rand(s))
         dt = DTable(nt, s ÷ 10)
         df = fetch(dt, DataFrame)
@@ -60,5 +60,30 @@ using SentinelArrays: ChainedVector
         @test names(v, Not(:a)) == names(v, r"x") == ["x1", "x2", "x3", "x4"]
         @test names(v, :x1) == names(v, 2) == ["x1"]
         @test names(v, Cols()) == names(v, Cols()) == []
+    end
+
+    @testset "combine" begin
+        s = 10_000
+        nt = (a=collect(1:s) .% 3, b=rand(s))
+        dt = DTable(nt, s ÷ 10)
+        df = fetch(dt, DataFrame)
+
+        t = (args...) -> begin
+            dt_01 = combine(dt, args...)
+            df_01 = combine(df, args...)
+
+            result = try
+                all(isapprox.(Tables.columns(df_01), Tables.columns(fetch(dt_01, DataFrame))))
+            catch
+                all(isequal.(Tables.columns(df_01), Tables.columns(fetch(dt_01, DataFrame))))
+            end
+            result
+        end
+
+
+        @test t(:a => mean, :b)
+        @test t(:a => mean)
+        @test t([] => (()-> ones(6_000)), :a => mean )
+        # combine(dt, [] => (() -> dt[1:3,1]) => :efaw)
     end
 end
