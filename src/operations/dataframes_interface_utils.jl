@@ -9,7 +9,7 @@ function select_rowfunction(row, mappable_part_of_normalized_cs, colresults)
                         [
                             k => getcolumn(row, k) for
                             k in getindex.(Ref(columnnames(row)), colidx.cols)
-                        ]...
+                        ]...,
                     )
                 else
                     getcolumn.(Ref(row), colidx)
@@ -50,21 +50,15 @@ function fillcolumns(
             cols = Vector{Any}()
             last_astable = 0
 
-            # if any(length.(col_vecs_fetched) .== 1)
-            #     @warn "skip"
-            #     return NamedTuple()
-            # end
-            # return NamedTuple()
             for (idx, (_, (_, sym))) in enumerate(normalized_cs)
                 if sym !== AsTable
                     col = if sym in csymbols
-                        index = something(indexin(csymbols, [sym])...)
+                        index = findfirst(x -> x === sym, csymbols)
                         if col_vecs_fetched[index] isa AbstractVector
                             col_vecs_fetched[index]
                         else
                             repeat([col_vecs_fetched[index]], expected_chunk_length)
                         end
-
                     else
                         getcolumn(ch, sym)
                     end
@@ -100,12 +94,10 @@ function fillcolumns(
     chunks = [
         begin
             cfrags = [
-                begin
-                    if len > 1
-                        colfragment(column, 1 + sum(clenghts[1:(i - 1)]), sum(clenghts[1:i]))
-                    else
-                        column
-                    end
+                if len > 1
+                    colfragment(column, 1 + sum(clenghts[1:(i - 1)]), sum(clenghts[1:i]))
+                else
+                    column
                 end for (column, len) in zip(col_vecs, col_lengths)
             ]
             Dagger.@spawn f(ch, result_column_symbols, cfrags, lens)
