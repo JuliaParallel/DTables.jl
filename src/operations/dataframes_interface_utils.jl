@@ -9,7 +9,7 @@ function select_rowfunction(row, mappable_part_of_normalized_cs, colresults)
                         [
                             k => getcolumn(row, k) for
                             k in getindex.(Ref(columnnames(row)), colidx.cols)
-                        ]...,
+                        ]...
                     )
                 else
                     getcolumn.(Ref(row), colidx)
@@ -33,75 +33,85 @@ function select_rowfunction(row, mappable_part_of_normalized_cs, colresults)
     return (; _cs...)
 end
 
+function fillcolumn(
+    chunk,
+    csymbols::Union{Vector{DataType},Vector{Symbol}, Vector{Union{DataType,Symbol}}},
+    colfragments::Union{Vector{Dagger.EagerThunk}, Vector{Any}},
+    expected_chunk_length::Int,
+    normalized_cs::Vector{Any},
+)
+    col_vecs_fetched = fetch.(colfragments)
+    colnames = Vector{Symbol}()
+    cols = Vector{Any}()
+    last_astable = 0
+
+    for (idx, (_, (_, sym))) in enumerate(normalized_cs)
+        if sym !== AsTable
+            col = if sym in csymbols
+                index = findfirst(x -> x === sym, csymbols)
+                if col_vecs_fetched[index] isa AbstractVector
+                    col_vecs_fetched[index]
+                else
+                    repeat([col_vecs_fetched[index]], expected_chunk_length)
+                end
+            else
+                getcolumn(chunk, sym)
+            end
+            push!(colnames, sym)
+            push!(cols, col)
+        elseif sym === AsTable
+            i = findfirst(x -> x === AsTable, csymbols[(last_astable + 1):end])
+            c = if i === nothing
+                getcolumn(chunk, Symbol("AsTable$(idx)"))
+            else
+                last_astable = i
+                if col_vecs_fetched[i] isa AbstractVector
+                    col_vecs_fetched[i]
+                else
+                    repeat([col_vecs_fetched[i]], expected_chunk_length)
+                end
+            end
+
+            push!.(Ref(colnames), columnnames(columns(c)))
+            push!.(Ref(cols), getcolumn.(Ref(columns(c)), columnnames(columns(c))))
+        else
+            throw(ErrorException("something is off"))
+        end
+    end
+    return materializer(chunk)(
+        merge(NamedTuple(), (; [e[1] => e[2] for e in zip(colnames, cols)]...))
+    )
+end
+
 function fillcolumns(
     dt::DTable,
     ics::Dict{Int,Any},
     normalized_cs::Vector{Any},
-    chunk_lengths_of_original_dt::Vector{Int},
+    clenghts::Vector{Int},
     col_lengths::Vector{Int},
 )
     col_keys_indices = collect(keys(ics))::Vector{Int}
     col_vecs = map(x -> ics[x], col_keys_indices)::Union{Vector{Any},Vector{Dagger.EagerThunk}}
 
-    f =
-        (ch, csymbols, colfragments, expected_chunk_length) -> begin
-            col_vecs_fetched = fetch.(colfragments)
-            colnames = Vector{Symbol}()
-            cols = Vector{Any}()
-            last_astable = 0
-
-            for (idx, (_, (_, sym))) in enumerate(normalized_cs)
-                if sym !== AsTable
-                    col = if sym in csymbols
-                        index = findfirst(x -> x === sym, csymbols)
-                        if col_vecs_fetched[index] isa AbstractVector
-                            col_vecs_fetched[index]
-                        else
-                            repeat([col_vecs_fetched[index]], expected_chunk_length)
-                        end
-                    else
-                        getcolumn(ch, sym)
-                    end
-                    push!(colnames, sym)
-                    push!(cols, col)
-                elseif sym === AsTable
-                    i = findfirst(x -> x === AsTable, csymbols[(last_astable + 1):end])
-                    if i === nothing
-                        c = getcolumn(ch, Symbol("AsTable$(idx)"))
-                    else
-                        last_astable = i
-                        c = if col_vecs_fetched[i] isa AbstractVector
-                            col_vecs_fetched[i]
-                        else
-                            repeat([col_vecs_fetched[i]], expected_chunk_length)
-                        end
-                    end
-
-                    push!.(Ref(colnames), columnnames(columns(c)))
-                    push!.(Ref(cols), getcolumn.(Ref(columns(c)), columnnames(columns(c))))
-                else
-                    throw(ErrorException("something is off"))
-                end
-            end
-            materializer(ch)(
-                merge(NamedTuple(), (; [e[1] => e[2] for e in zip(colnames, cols)]...))
-            )
-        end
-
     colfragment = (column, s, e) -> Dagger.@spawn getindex(column, s:e)
-    clenghts = chunk_lengths_of_original_dt
     result_column_symbols = getindex.(Ref(map(x -> x[2][2], normalized_cs)), col_keys_indices)
-    chunks = [
-        begin
-            cfrags = [
+
+    chunks = Dagger.EagerThunk[
+        Dagger.spawn(
+            fillcolumn,
+            ch,
+            result_column_symbols,
+            [
                 if len > 1
                     colfragment(column, 1 + sum(clenghts[1:(i - 1)]), sum(clenghts[1:i]))
                 else
                     column
                 end for (column, len) in zip(col_vecs, col_lengths)
-            ]
-            Dagger.@spawn f(ch, result_column_symbols, cfrags, lens)
-        end for (i, (ch, lens)) in enumerate(zip(dt.chunks, clenghts))
+            ],
+            lens,
+            normalized_cs,
+        )
+        for (i, (ch, lens)) in enumerate(zip(dt.chunks, clenghts)) if lens > 0
     ]
     return DTable(chunks, dt.tabletype)
 end

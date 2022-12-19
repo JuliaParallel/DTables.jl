@@ -83,6 +83,7 @@ using SentinelArrays: ChainedVector
 
         @test t(:a => mean, :b)
         @test t(:a => mean)
-        @test t([] => (()-> ones(6_000)), :a => mean)
+        @test t([] => (()-> ones(5_000)), :a => mean)
+        @test t([] => (()-> ones(15_000)), :a => mean)
     end
 end
