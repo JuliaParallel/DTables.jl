@@ -435,6 +435,15 @@ using OnlineStats
         r = reduce(*, g)
         fr = fetch(r)
 
+        a = DTable((a=rand(["abc", "bcd", "efg"], 100), b=rand(100)), 11)
+        r = fetch(reduce((x, y) -> x + y, DTables.groupby(a, :a), cols=[:b], init=0))
+        @test all(a.a .∈ Ref(r.a))
+
+        a = DTable((a=rand(["abc", "bcd", "efg"], 100), b=rand(100)), 11)
+        r = fetch(reduce((x, y) -> x + y, DTables.groupby(a, [:a, :b]), cols=[:b], init=0))
+        @test all(a.a .∈ Ref(r.a))
+        @test all(a.b .∈ Ref(r.b))
+
         for (i, key) in enumerate(fr.a)
             @test fr.result_a[i] == repeat(key, length(cs1) ÷ 4)
             @test fr.result_b[i] == 3 ^ (length(cs1) ÷ 4)

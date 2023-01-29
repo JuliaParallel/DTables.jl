@@ -196,8 +196,12 @@ function reduce(
     ]
 
     construct_result =
-        (_keys, _gcols, _columns, _results, _prefix) -> begin
-            ks = [col => getindex.(_keys, i) for (i, col) in enumerate(_gcols)]
+        (_keys::Base.KeySet, _gcols, _columns, _results, _prefix) -> begin
+            ks = if eltype(_keys) <: NamedTuple # many keys in groupby
+                [col => getindex.(_keys, col) for col in _gcols]
+            else # single key in groupby
+                [col => collect(_keys) for col in _gcols]
+            end
             rs = [
                 Symbol(_prefix * string(r)) => fetch(_results[i]) for (i, r) in enumerate(_columns)
             ]
