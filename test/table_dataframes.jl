@@ -80,9 +80,10 @@ using SentinelArrays: ChainedVector
             result
         end
 
-
-        @test t(:a => mean, :b)
         @test t(:a => mean)
+        @test t(:a => mean, :b)
+        @test t(:a => mean, :b => mean)
+        @test t(:a => mean, :b, :b => mean)
         @test t([] => (()-> ones(5_000)), :a => mean)
         @test t([] => (()-> ones(15_000)), :a => mean)
     end

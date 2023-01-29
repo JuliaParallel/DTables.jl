@@ -54,7 +54,7 @@ function _manipulate(df::DTable, normalized_cs::Vector{Any}, copycols::Bool, kee
     # STAGE 1: Spawning full column thunks - also multicolumn when needed (except identity)
     # These get saved later and used in last stages.
     #########
-    normalized_cs_results = Dict{Int,Any}()
+    normalized_cs_results = Dict{Int,Dagger.EagerThunk}()
     for (idx, (column_index, (fun, result_column_symbol))) in enumerate(normalized_cs)
         if (!(column_index isa AsTable) && !(fun isa ByRow) && fun != identity)
             if length(column_index) > 0
@@ -73,12 +73,10 @@ function _manipulate(df::DTable, normalized_cs::Vector{Any}, copycols::Bool, kee
     # These will be just injected as values in the mapping, because it's a vector full of these values
     #########
 
-    mapmask = [
-        haskey(normalized_cs_results, x) && normalized_cs_results[x] isa Dagger.EagerThunk for
-        (x, _) in enumerate(normalized_cs)
-    ]
-
-    mappable_part_of_normalized_cs = filter(x -> !mapmask[x[1]], collect(enumerate(normalized_cs)))
+    mappable_part_of_normalized_cs = filter(
+        x -> !haskey(normalized_cs_results, x[1]),
+        collect(enumerate(normalized_cs))
+    )
 
     #########
     # STAGE 3: Mapping function (need to ensure this is compiled only once)
@@ -87,24 +85,24 @@ function _manipulate(df::DTable, normalized_cs::Vector{Any}, copycols::Bool, kee
     #########
 
     # TODO: don't run this at all when there are no mappable operations
-    rd = map(x -> select_rowfunction(x, mappable_part_of_normalized_cs, normalized_cs_results), df)
+    rd = map(x -> select_rowfunction(x, mappable_part_of_normalized_cs), df)
 
     #########
     # STAGE 4: Preping for last stage - getting all the full column thunks with not 1 lengths
     #########
 
     has_any_mappable = length(mappable_part_of_normalized_cs) > 0
-    fullcolumn_ops_length = Int[
+    fullcolumn_ops_result_lengths = Int[
         fetch(Dagger.spawn(length, v)) for v in values(normalized_cs_results)
     ]
 
     collength_to_compare_against = if has_any_mappable || keeprows
         length(df)
     else
-        maximum(fullcolumn_ops_length)
+        maximum(fullcolumn_ops_result_lengths)
     end
 
-    if !all(map(x -> x == 1 || x == collength_to_compare_against, fullcolumn_ops_length))
+    if !all(map(x -> x == 1 || x == collength_to_compare_against, fullcolumn_ops_result_lengths))
         throw(ArgumentError("New columns must have the same length as old columns"))
     end
 
@@ -115,10 +113,12 @@ function _manipulate(df::DTable, normalized_cs::Vector{Any}, copycols::Bool, kee
 
     new_chunk_lengths = if has_any_mappable || keeprows
         chunk_lengths(df)
-    elseif maximum(fullcolumn_ops_length) == 1
-        vcat(ones(Int, 1), zeros(Int, nchunks(df) - 1))
+    elseif maximum(fullcolumn_ops_result_lengths) == 1
+        z = zeros(Int, nchunks(df))
+        z[1] = 1
+        z
     else # TODO: this is a bad temp solution
-        b = maximum(fullcolumn_ops_length)
+        b = maximum(fullcolumn_ops_result_lengths)
         a = zeros(Int, nchunks(df))
         for (i, c) in enumerate(chunk_lengths(df))
             if b >= c
@@ -136,7 +136,7 @@ function _manipulate(df::DTable, normalized_cs::Vector{Any}, copycols::Bool, kee
     end
 
     rd = fillcolumns(
-        rd, normalized_cs_results, normalized_cs, new_chunk_lengths, fullcolumn_ops_length
+        rd, normalized_cs_results, normalized_cs, new_chunk_lengths, fullcolumn_ops_result_lengths
     )
 
     return rd
