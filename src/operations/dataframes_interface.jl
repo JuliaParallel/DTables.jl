@@ -54,14 +54,16 @@ function _manipulate(df::DTable, normalized_cs::Vector{Any}, copycols::Bool, kee
     # STAGE 1: Spawning full column thunks - also multicolumn when needed (except identity)
     # These get saved later and used in last stages.
     #########
-    colresults = Dict{Int,Any}()
-    for (i, (colidx, (f, _))) in enumerate(normalized_cs)
-        if !(colidx isa AsTable) && !(f isa ByRow) && f != identity
-            if length(colidx) > 0
-                cs = DTableColumn.(Ref(df), [colidx...])
-                colresults[i] = Dagger.@spawn f(cs...)
+    normalized_cs_results = Dict{Int,Dagger.EagerThunk}()
+    for (idx, (column_index, (fun, result_column_symbol))) in enumerate(normalized_cs)
+        if (!(column_index isa AsTable) && !(fun isa ByRow) && fun != identity)
+            if length(column_index) > 0
+                normalized_cs_results[idx] = Dagger.@spawn fun(
+                    DTableColumn.(Ref(df), [column_index...])...
+                )
             else
-                colresults[i] = Dagger.@spawn f() # case of select(d, [] => fun)
+                # case of select(d, [] => fun) where there are no input columns
+                normalized_cs_results[idx] = Dagger.@spawn fun()
             end
         end
     end
@@ -71,16 +73,9 @@ function _manipulate(df::DTable, normalized_cs::Vector{Any}, copycols::Bool, kee
     # These will be just injected as values in the mapping, because it's a vector full of these values
     #########
 
-    colresults = Dict{Int,Any}(
-        k => fetch(Dagger.spawn(length, v)) == 1 ? fetch(v) : v for (k, v) in colresults
+    mappable_part_of_normalized_cs = filter(
+        x -> !haskey(normalized_cs_results, x[1]), collect(enumerate(normalized_cs))
     )
-
-    mapmask = [
-        haskey(colresults, x) && colresults[x] isa Dagger.EagerThunk for
-        (x, _) in enumerate(normalized_cs)
-    ]
-
-    mappable_part_of_normalized_cs = filter(x -> !mapmask[x[1]], collect(enumerate(normalized_cs)))
 
     #########
     # STAGE 3: Mapping function (need to ensure this is compiled only once)
@@ -88,34 +83,68 @@ function _manipulate(df::DTable, normalized_cs::Vector{Any}, copycols::Bool, kee
     # Essentially we skip all the non-mappable stuff here
     #########
 
-    rd = map(x -> select_rowfunction(x, mappable_part_of_normalized_cs, colresults), df)
+    has_any_mappable = length(mappable_part_of_normalized_cs) > 0
+
+    rd = if has_any_mappable || keeprows
+        map(x -> select_rowfunction(x, mappable_part_of_normalized_cs), df)
+    else
+        nothing # in case there's nothing mappable we just go ahead with an empty dtable (just nothing)
+    end
 
     #########
     # STAGE 4: Preping for last stage - getting all the full column thunks with not 1 lengths
     #########
-    cpcolresults = Dict{Int,Any}()
 
-    for (k, v) in colresults
-        if v isa Dagger.EagerThunk
-            cpcolresults[k] = v
-        end
+    fullcolumn_ops_result_lengths = Int[
+        fetch(Dagger.spawn(length, v)) for v in values(normalized_cs_results)
+    ]
+
+    collength_to_compare_against = if has_any_mappable || keeprows
+        length(df)
+    else
+        maximum(fullcolumn_ops_result_lengths)
     end
 
-    for (_, v) in colresults
-        if v isa Dagger.EagerThunk
-            if fetch(Dagger.spawn(length, v)) != length(df)
-                throw("result column is not the size of the table")
-            end
-        end
+    if !all(map(x -> x == 1 || x == collength_to_compare_against, fullcolumn_ops_result_lengths))
+        throw(ArgumentError("New columns must have the same length as old columns"))
     end
+
     #########
     # STAGE 5: Fill columns - meaning the previously omitted full column tasks
     # will be now merged into the final DTable
     #########
 
-    rd = fillcolumns(rd, cpcolresults, normalized_cs, chunk_lengths(df))
+    new_chunk_lengths = if has_any_mappable || keeprows
+        chunk_lengths(df)
+    elseif maximum(fullcolumn_ops_result_lengths) == 1
+        z = zeros(Int, nchunks(df))
+        z[1] = 1
+        z
+    else
+        b = maximum(fullcolumn_ops_result_lengths)
+        a = zeros(Int, nchunks(df))
+        avg_chunk_length = floor(Int, mean(chunk_lengths(df)))
+        for (i, c) in enumerate(chunk_lengths(df))
+            if b >= c
+                a[i] += c
+                b -= c
+            else
+                a[i] += b
+                b = 0
+            end
+        end
+        while b > 0
+            bm = min(b, avg_chunk_length)
+            push!(a, bm)
+            b -= bm
+        end
+        a
+    end
 
-    return rd
+    rd2 = fillcolumns(
+        rd, normalized_cs_results, normalized_cs, new_chunk_lengths, fullcolumn_ops_result_lengths
+    )
+    return rd2
 end
 
 """
@@ -144,6 +173,26 @@ function select(
         map(x -> broadcast_pair(df, x), args)...;
         copycols=copycols,
         keeprows=true,
+        renamecols=renamecols,
+    )
+end
+
+function transform(
+    df::DTable,
+    @nospecialize(args...);
+    copycols::Bool=true,
+    renamecols::Bool=true,
+    threads::Bool=true,
+)
+    return select(df, :, args...; copycols=copycols, renamecols=renamecols, threads=threads)
+end
+
+function combine(df::DTable, @nospecialize(args...); renamecols::Bool=true, threads::Bool=true)
+    return manipulate(
+        df,
+        map(x -> broadcast_pair(df, x), args)...;
+        copycols=true,
+        keeprows=false,
         renamecols=renamecols,
     )
 end

@@ -16,6 +16,7 @@ using DataFrames:
     make_pair_concrete
 using InvertedIndices: Not
 using SentinelArrays: ChainedVector
+using Statistics: mean
 using TableOperations: TableOperations
 using Tables:
     columnindex,
@@ -54,7 +55,7 @@ import Base:
 import DataAPI: leftjoin, ncol, nrow, innerjoin
 import Tables:
     columnaccess, columnnames, columns, getcolumn, istable, partitions, rowaccess, rows, schema
-import DataFrames: broadcast_pair, select, index
+import DataFrames: broadcast_pair, combine, groupby, select, index, transform
 
 ############################################################################################
 # Export
@@ -64,6 +65,7 @@ export All,
     AsTable,
     Between,
     ByRow,
+    combine,
     Cols,
     DTable,
     DTableColumn,
@@ -73,8 +75,10 @@ export All,
     Not,
     nrow,
     select,
+    groupby,
     tabletype,
     tabletype!,
+    transform,
     trim,
     trim!
 ############################################################################################
