@@ -33,8 +33,8 @@ end
 
 function fillcolumn(
     chunk,
-    csymbols::Union{Vector{DataType},Vector{Symbol}, Vector{Union{DataType,Symbol}}},
-    colfragments::Union{Vector{Dagger.EagerThunk}, Vector{Any}},
+    csymbols::Union{Vector{DataType},Vector{Symbol},Vector{Union{DataType,Symbol}}},
+    colfragments::Union{Vector{Dagger.EagerThunk},Vector{Any}},
     expected_chunk_length::Int,
     normalized_cs::Vector{Any},
 )
@@ -82,17 +82,30 @@ function fillcolumn(
 end
 
 function fillcolumns(
-    dt::DTable,
+    dt::Union{Nothing,DTable},
     normalized_cs_results::Dict{Int,Dagger.EagerThunk},
     normalized_cs::Vector{Any},
     new_chunk_lengths::Vector{Int},
     fullcolumn_ops_result_lengths::Vector{Int},
 )
     fullcolumn_ops_indices_in_normalized_cs = collect(keys(normalized_cs_results))::Vector{Int}
-    fullcolumn_ops_results_ordered = map(x -> normalized_cs_results[x], fullcolumn_ops_indices_in_normalized_cs)::Union{Vector{Any},Vector{Dagger.EagerThunk}}
+    fullcolumn_ops_results_ordered = map(
+        x -> normalized_cs_results[x], fullcolumn_ops_indices_in_normalized_cs
+    )::Union{Vector{Any},Vector{Dagger.EagerThunk}}
 
     colfragment = (column, s, e) -> Dagger.@spawn getindex(column, s:e)
-    result_column_symbols = getindex.(Ref(map(x -> x[2][2], normalized_cs)), fullcolumn_ops_indices_in_normalized_cs)
+    result_column_symbols =
+        getindex.(Ref(map(x -> x[2][2], normalized_cs)), fullcolumn_ops_indices_in_normalized_cs)
+
+    dtchunks = if dt === nothing
+        [Dagger.spawn(() -> nothing) for _ in 1:length(new_chunk_lengths)]
+    else
+        dt.chunks
+    end
+    dtchunks_filled = [
+        x <= length(dtchunks) ? dtchunks[x] : Dagger.spawn(() -> nothing) for
+        x in 1:length(new_chunk_lengths)
+    ]
 
     chunks = Dagger.EagerThunk[
         Dagger.spawn(
@@ -101,15 +114,23 @@ function fillcolumns(
             result_column_symbols,
             [
                 if len > 1
-                    colfragment(column, 1 + sum(new_chunk_lengths[1:(i - 1)]), sum(new_chunk_lengths[1:i]))
+                    colfragment(
+                        column, 1 + sum(new_chunk_lengths[1:(i - 1)]), sum(new_chunk_lengths[1:i])
+                    )
                 else
                     column
-                end for (column, len) in zip(fullcolumn_ops_results_ordered, fullcolumn_ops_result_lengths)
+                end for
+                (column, len) in zip(fullcolumn_ops_results_ordered, fullcolumn_ops_result_lengths)
             ],
             new_chunk_length,
             normalized_cs,
-        )
-        for (i, (chunk, new_chunk_length)) in enumerate(zip(dt.chunks, new_chunk_lengths)) if new_chunk_length > 0
+        ) for
+        (i, (chunk, new_chunk_length)) in enumerate(zip(dtchunks_filled, new_chunk_lengths)) if
+        new_chunk_length > 0
     ]
-    return DTable(chunks, dt.tabletype)
+    if dt === nothing
+        return DTable(chunks, nothing)
+    else
+        return DTable(chunks, dt.tabletype)
+    end
 end

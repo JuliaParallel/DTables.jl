@@ -16,6 +16,7 @@ using DataFrames:
     make_pair_concrete
 using InvertedIndices: Not
 using SentinelArrays: ChainedVector
+using Statistics: mean
 using TableOperations: TableOperations
 using Tables:
     columnindex,

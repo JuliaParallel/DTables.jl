@@ -74,8 +74,7 @@ function _manipulate(df::DTable, normalized_cs::Vector{Any}, copycols::Bool, kee
     #########
 
     mappable_part_of_normalized_cs = filter(
-        x -> !haskey(normalized_cs_results, x[1]),
-        collect(enumerate(normalized_cs))
+        x -> !haskey(normalized_cs_results, x[1]), collect(enumerate(normalized_cs))
     )
 
     #########
@@ -84,14 +83,18 @@ function _manipulate(df::DTable, normalized_cs::Vector{Any}, copycols::Bool, kee
     # Essentially we skip all the non-mappable stuff here
     #########
 
-    # TODO: don't run this at all when there are no mappable operations
-    rd = map(x -> select_rowfunction(x, mappable_part_of_normalized_cs), df)
+    has_any_mappable = length(mappable_part_of_normalized_cs) > 0
+
+    rd = if has_any_mappable || keeprows
+        map(x -> select_rowfunction(x, mappable_part_of_normalized_cs), df)
+    else
+        nothing # in case there's nothing mappable we just go ahead with an empty dtable (just nothing)
+    end
 
     #########
     # STAGE 4: Preping for last stage - getting all the full column thunks with not 1 lengths
     #########
 
-    has_any_mappable = length(mappable_part_of_normalized_cs) > 0
     fullcolumn_ops_result_lengths = Int[
         fetch(Dagger.spawn(length, v)) for v in values(normalized_cs_results)
     ]
@@ -120,6 +123,7 @@ function _manipulate(df::DTable, normalized_cs::Vector{Any}, copycols::Bool, kee
     else # TODO: this is a bad temp solution
         b = maximum(fullcolumn_ops_result_lengths)
         a = zeros(Int, nchunks(df))
+        avg_chunk_length = floor(Int, mean(chunk_lengths(df)))
         for (i, c) in enumerate(chunk_lengths(df))
             if b >= c
                 a[i] += c
@@ -129,17 +133,18 @@ function _manipulate(df::DTable, normalized_cs::Vector{Any}, copycols::Bool, kee
                 b = 0
             end
         end
-        if b > 0
-            a[end] += b # TODO fix this - leftover is just added at the end; basically handles the rare case where combine output is longer than the table
+        while b > 0
+            bm = min(b, avg_chunk_length)
+            push!(a, bm)
+            b -= bm
         end
         a
     end
 
-    rd = fillcolumns(
+    rd2 = fillcolumns(
         rd, normalized_cs_results, normalized_cs, new_chunk_lengths, fullcolumn_ops_result_lengths
     )
-
-    return rd
+    return rd2
 end
 
 """
