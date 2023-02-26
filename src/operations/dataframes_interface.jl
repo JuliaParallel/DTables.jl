@@ -120,7 +120,7 @@ function _manipulate(df::DTable, normalized_cs::Vector{Any}, copycols::Bool, kee
         z = zeros(Int, nchunks(df))
         z[1] = 1
         z
-    else # TODO: this is a bad temp solution
+    else
         b = maximum(fullcolumn_ops_result_lengths)
         a = zeros(Int, nchunks(df))
         avg_chunk_length = floor(Int, mean(chunk_lengths(df)))
