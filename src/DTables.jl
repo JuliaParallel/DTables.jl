@@ -55,7 +55,7 @@ import Base:
 import DataAPI: leftjoin, ncol, nrow, innerjoin
 import Tables:
     columnaccess, columnnames, columns, getcolumn, istable, partitions, rowaccess, rows, schema
-import DataFrames: broadcast_pair, combine, select, index, transform
+import DataFrames: broadcast_pair, combine, groupby, select, index, transform
 
 ############################################################################################
 # Export
@@ -75,6 +75,7 @@ export All,
     Not,
     nrow,
     select,
+    groupby,
     tabletype,
     tabletype!,
     transform,
