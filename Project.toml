@@ -1,7 +1,7 @@
 name = "DTables"
 uuid = "20c56dc6-594c-4682-91cf-1d46875b1eba"
 authors = ["Krystian Guliński", "Julian Samaroo", "and contributors"]
-version = "0.2.1"
+version = "0.3.0"
 
 [deps]
 Dagger = "d58978e5-989f-55fb-8d15-ea34adc7bf54"
