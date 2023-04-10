@@ -69,6 +69,7 @@ export All,
     Cols,
     DTable,
     DTableColumn,
+    enable_disk_caching!,
     innerjoin,
     leftjoin,
     ncol,
@@ -83,6 +84,7 @@ export All,
     trim!
 ############################################################################################
 
+include("utilities.jl")
 include("table/dtable.jl")
 include("table/gdtable.jl")
 include("table/tables.jl")
