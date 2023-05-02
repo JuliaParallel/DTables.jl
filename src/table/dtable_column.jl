@@ -76,5 +76,5 @@ function iterate(dtc::DTableColumn, iter)
     return dtc._iter
 end
 
-Base.eltype(dtc::DTableColumn) = Tables.schema(Tables.columns(dtc.dtable)).types[dtc.col]
+Base.eltype(dtc::DTableColumn) = schema(columns(dtc.dtable)).types[dtc.col]
 Base.collect(dtc::DTableColumn) = _getcolumn(dtc.dtable, dtc.col)
