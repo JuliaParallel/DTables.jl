@@ -12,7 +12,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        julia-version: [1.8.2]
+        julia-version: [1.9.2]
         julia-arch: [x86]
         os: [ubuntu-latest]
     steps:
@@ -23,7 +23,7 @@ jobs:
       - name: Install JuliaFormatter and format
         run: |
           julia  -e 'using Pkg; Pkg.add(PackageSpec(name="JuliaFormatter"))'
-          julia  -e 'using JuliaFormatter; format("src", verbose=true)'
+          julia  -e 'using JuliaFormatter; format(".", verbose=true)'
       - name: Format check
         run: |
           julia -e '
