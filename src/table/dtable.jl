@@ -235,7 +235,11 @@ Removes empty chunks from `d`.
 """
 function trim!(d::DTable)
     check_result = [Dagger.@spawn isnonempty(c) for c in d.chunks]
-    d.chunks = getindex.(filter(x -> fetch(check_result[x[1]]), collect(enumerate(d.chunks))), 2)
+    for idx in length(d.chunks):-1:1
+        if !fetch(check_result[idx])
+            deleteat!(d.chunks, idx)
+        end
+    end
     return d
 end
 
