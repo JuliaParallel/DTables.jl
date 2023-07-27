@@ -1,4 +1,5 @@
-const VTYPE = Vector{Union{Dagger.Chunk,Dagger.EagerThunk}}
+const ELTYPE = Union{Dagger.Chunk,Dagger.EagerThunk}
+const VTYPE = Vector{ELTYPE}
 
 """
     DTable
@@ -151,6 +152,11 @@ function _file_load(filename::AbstractString, loader_function::Function, tablety
     sink = materializer(tabletype === nothing ? part : tabletype())
     tpart = sink(part)
     return tpart
+end
+
+function DTable(files::Vector{Dagger.File}; tabletype=nothing)
+    chunks = ELTYPE[file.chunk for file in files]
+    return DTable(chunks, tabletype)
 end
 
 """
