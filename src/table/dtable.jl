@@ -4,7 +4,6 @@ const VTYPE = Vector{Union{Dagger.Chunk,Dagger.EagerThunk}}
     DTable
 
 Structure representing the distributed table based on Dagger.
-
 The table is stored as a vector of `Chunk` structures which hold partitions of the table.
 That vector can also store `Dagger.EagerThunk` structures when an operation that modifies
 the underlying partitions was applied to it (currently only `filter`).
@@ -17,7 +16,6 @@ end
 
 DTable(chunks::Vector, tabletype) = DTable(VTYPE(chunks), tabletype, nothing)
 DTable(chunks::Vector, tabletype, schema) = DTable(VTYPE(chunks), tabletype, schema)
-
 """
     DTable(table; tabletype=nothing) -> DTable
 
@@ -256,6 +254,27 @@ end
 
 function length(table::DTable)
     return sum(chunk_lengths(table))
+end
+
+function first(table::DTable, rows::UInt)
+    if nrow(table) == 0
+        return table
+    end
+
+    chunk_length = chunk_lengths(table)[1]
+    num_full_chunks = Int(floor(rows / chunk_length))       # number of required chunks
+    sink = materializer(table.tabletype)
+    if num_full_chunks * chunk_length == rows
+        required_chunks = table.chunks[1:num_full_chunks]
+    else
+        # take only the needed rows from extra chunk
+        needed_rows = rows - num_full_chunks * chunk_length
+        extra_chunk = table.chunks[num_full_chunks + 1]
+        extra_chunk_rows = rowtable(fetch(extra_chunk))
+        new_chunk = Dagger.tochunk(sink(extra_chunk_rows[1:needed_rows]))
+        required_chunks = vcat(table.chunks[1:num_full_chunks], [new_chunk])
+    end
+    return DTable(required_chunks, table.tabletype)
 end
 
 function columnnames_svector(d::DTable)
