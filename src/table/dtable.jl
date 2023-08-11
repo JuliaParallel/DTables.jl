@@ -130,6 +130,8 @@ function DTable(table, chunksize::Integer; tabletype=nothing, interpartition_mer
     return DTable(chunks, type)
 end
 
+
+
 """
     DTable(loader_function, files::Vector{String}; tabletype=nothing)
 
@@ -139,19 +141,21 @@ one file is used to create one partition.
 
 Providing `tabletype` kwarg overrides the internal table partition type.
 """
-function DTable(loader_function::Function, files::Vector{String}; tabletype=nothing)
+function DTable(loader_function, files::Vector{String}; tabletype=nothing)
     chunks = Dagger.EagerThunk[
         Dagger.spawn(_file_load, file, loader_function, tabletype) for file in files
     ]
     return DTable(chunks, tabletype)
 end
 
-function _file_load(filename::AbstractString, loader_function::Function, tabletype::Any)
+function _file_load(filename::AbstractString, loader_function, tabletype::Any)
     part = loader_function(filename)
     sink = materializer(tabletype === nothing ? part : tabletype())
     tpart = sink(part)
     return tpart
 end
+
+
 
 """
     fetch(d::DTable)
