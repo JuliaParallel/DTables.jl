@@ -245,7 +245,8 @@ show(io::IO, d::DTable) = show(io, MIME"text/plain"(), d)
 function show(io::IO, ::MIME"text/plain", d::DTable)
     tabletype = d.tabletype === nothing ? "unknown (use `tabletype!(::DTable)`)" : d.tabletype
     println(io, "DTable with $(nchunks(d)) partitions")
-    print(io, "Tabletype: $tabletype")
+    println(io, "Tabletype: $tabletype")
+    pretty_table(io,fetch(d))
     return nothing
 end
 
