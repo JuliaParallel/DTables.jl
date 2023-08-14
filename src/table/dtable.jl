@@ -130,8 +130,6 @@ function DTable(table, chunksize::Integer; tabletype=nothing, interpartition_mer
     return DTable(chunks, type)
 end
 
-
-
 """
     DTable(loader_function, files::Vector{String}; tabletype=nothing)
 
