@@ -153,8 +153,6 @@ function _file_load(filename::AbstractString, loader_function, tabletype::Any)
     return tpart
 end
 
-
-
 """
     fetch(d::DTable)
 
