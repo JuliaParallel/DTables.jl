@@ -91,6 +91,20 @@ using OnlineStats
         @test da.tabletype === NamedTuple
     end
 
+    @testset "file loaders - CSV.File compatibility" begin
+        # for this interface: https://juliaparallel.org/DTables.jl/dev/dtable/#Underlying-table-type
+        size = 10
+        nt = (a = rand(Int, size), b = rand(Int, size))
+        fname = tempname()
+        CSV.write(fname, nt)
+
+        files = [fname, fname, fname]
+        dt = DTable(CSV.File, files)
+
+        @test all(fetch(dt).a .== vcat(nt.a, nt.a, nt.a))
+        @test all(fetch(dt).b .== vcat(nt.b, nt.b, nt.b))
+    end
+
     @testset "constructors - interpartition merges" begin
         size = 1_000
         nt = (a = rand(size), b = rand(size))
