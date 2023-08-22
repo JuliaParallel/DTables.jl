@@ -129,7 +129,8 @@ function show(io::IO, ::MIME"text/plain", gd::GDTable)
     grouped_by_cols = gd.cols === nothing ? string(gd.grouping_function) : grouped_cols(gd)
     println(io, "GDTable with $(nchunks(gd)) partitions and $(length(gd)) keys")
     println(io, "Tabletype: $tabletype")
-    print(io, "Grouped by: $grouped_by_cols")
+    println(io, "Grouped by: $grouped_by_cols")
+    pretty_table(io, gd)
     return nothing
 end
 
