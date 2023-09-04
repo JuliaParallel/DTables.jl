@@ -13,10 +13,11 @@ mutable struct DTable
     chunks::VTYPE
     tabletype
     schema::Union{Nothing,Schema}
+    chunk_lengths::Union{Nothing,Vector{Int64}}
 end
 
-DTable(chunks::Vector, tabletype) = DTable(VTYPE(chunks), tabletype, nothing)
-DTable(chunks::Vector, tabletype, schema) = DTable(VTYPE(chunks), tabletype, schema)
+DTable(chunks::Vector, tabletype) = DTable(VTYPE(chunks), tabletype, nothing, nothing)
+DTable(chunks::Vector, tabletype, schema) = DTable(VTYPE(chunks), tabletype, schema, nothing)
 
 """
     DTable(table; tabletype=nothing) -> DTable
@@ -251,8 +252,14 @@ function show(io::IO, ::MIME"text/plain", d::DTable)
 end
 
 function chunk_lengths(table::DTable)
+    if table.chunk_lengths !== nothing
+        return table.chunk_lengths
+    end
+    # find chunk_lengths
     f = x -> length(rows(x))
-    return fetch.([Dagger.@spawn f(c) for c in table.chunks])
+    # cache results
+    table.chunk_lengths = fetch.([Dagger.@spawn f(c) for c in table.chunks])
+    return table.chunk_lengths
 end
 
 function length(table::DTable)
