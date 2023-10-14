@@ -5,9 +5,8 @@ broadcast_pair(dt::DTable, p) = broadcast_pair(empty_dataframe(dt), p)
 function manipulate(
     dt::DTable, args::AbstractVector{Int}; copycols::Bool, keeprows::Bool, renamecols::Bool
 )
-    colidx = first(args)
-    colname = columnnames(columns(dt))[colidx]
-    return map(r -> (; colname => getcolumn(r, colidx)), dt)
+    colnames = propertynames(dt)
+    return map(r -> (; [colnames[colidx] => getcolumn(r, colidx) for colidx in args]...), dt)
 end
 
 # Copied as is from DataFrames.jl
