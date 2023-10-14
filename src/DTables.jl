@@ -56,7 +56,6 @@ import DataAPI: leftjoin, ncol, nrow, innerjoin
 import Tables:
     columnaccess, columnnames, columns, getcolumn, istable, partitions, rowaccess, rows, schema
 import DataFrames: broadcast_pair, combine, groupby, select, index, transform
-import PrettyTables: pretty_table
 
 ############################################################################################
 # Export
