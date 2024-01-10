@@ -24,15 +24,15 @@ julia> fetch(m)
 ```
 """
 function map(f, d::DTable)
-    chunk_wrap = (_chunk, _f) -> begin
+    chunk_wrap = (_chunk, _f, tabletype) -> begin
         return if isnonempty(_chunk)
-            sink = materializer(_chunk)
+            sink = materializer(tabletype === nothing ? _chunk : tabletype())
             sink(TableOperations.map(_f, _chunk))
         else
             _chunk
         end
     end
-    chunks = map(c -> Dagger.spawn(chunk_wrap, c, f), d.chunks)
+    chunks = map(c -> Dagger.spawn(chunk_wrap, c, f, d.tabletype), d.chunks)
     return DTable(chunks, d.tabletype)
 end
 
