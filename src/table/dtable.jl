@@ -265,6 +265,26 @@ function length(table::DTable)
     return sum(chunk_lengths(table))
 end
 
+function first(table::DTable, rows::UInt)
+    if nrow(table) == 0
+        return table
+    end
+
+    chunk_length = maximum(chunk_lengths(table))
+    num_full_chunks = Int(floor(rows / chunk_length))       # number of required chunks
+    sink = materializer(table.tabletype)
+    if num_full_chunks * chunk_length == rows
+        required_chunks = table.chunks[1:num_full_chunks]
+    else
+        # take only the needed rows from extra chunk
+        needed_rows = rows - num_full_chunks * chunk_length
+        extra_chunk = table.chunks[num_full_chunks + 1]
+        new_chunk = Dagger.@spawn sink(rowtable(fetch(extra_chunk))[1:needed_rows])
+        required_chunks = vcat(table.chunks[1:num_full_chunks], [new_chunk])
+    end
+    return DTable(required_chunks, table.tabletype)
+end
+
 function columnnames_svector(d::DTable)
     colnames_tuple = determine_columnnames(d)
     return colnames_tuple !== nothing ? [sym for sym in colnames_tuple] : nothing
