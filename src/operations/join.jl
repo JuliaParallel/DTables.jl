@@ -254,6 +254,9 @@ function build_joined_table(
             c = getcolumn(rcols, i)
             copyto!(newc, view(c, inner_r))
         end
+        if jointype != :innerjoin && fulllength > length(inner_r)
+            fill!(view(newc, (length(inner_r) + 1):fulllength), missing)
+        end
         cols[colcounter] = newc
         colcounter += 1
     end
