@@ -23,22 +23,24 @@ columnaccess(table::DTable) = true
 columns(table::DTable) = DTableColumnIterator(table)
 
 function determine_schema(table::DTable)
-    if table.schema !== nothing
-        return table.schema
+    table.schema !== nothing && return table.schema
+    # Acquire per-table lock so that concurrent tasks (e.g. multiple outer join
+    # tasks sharing the same DTable) don't race on reading/writing table.schema
+    # and don't each spawn redundant nested Dagger tasks.
+    lock(table.schema_lock) do
+        table.schema !== nothing && return  # already set by a racing task
+        c_idx = 1
+        r = (false, nothing)
+        while !r[1] && table.chunks !== nothing && c_idx <= length(table.chunks)
+            # Fetch the chunk directly — no nested Dagger.spawn needed here.
+            chunk_data = fetch(table.chunks[c_idx])
+            has_data = isnonempty(chunk_data)
+            r = (has_data, has_data ? schema(rows(chunk_data)) : nothing)
+            c_idx += 1
+        end
+        table.schema = r[2]
     end
-    # Figure out schema
-    chunk_f = chunk -> begin
-        r = isnonempty(chunk)
-        (r, r ? schema(rows(chunk)) : nothing)
-    end
-    c_idx = 1
-    r = (false, nothing)
-    while !r[1] && table.chunks !== nothing && c_idx <= length(table.chunks)
-        r = fetch(Dagger.spawn(chunk_f, table.chunks[c_idx]))
-        c_idx += 1
-    end
-    # cache results
-    return table.schema = r[2]
+    return table.schema
 end
 
 function determine_columnnames(table::DTable)

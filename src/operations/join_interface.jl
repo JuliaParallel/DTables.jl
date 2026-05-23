@@ -29,9 +29,27 @@ function leftjoin(d1::DTable, d2; kwargs...)
 end
 
 function leftjoin(d1::DTable, d2::DTable; kwargs...)
-    f = (l, r, ks) -> _join(:leftjoin, l, r; ks...)
-    v = [Dagger.@spawn f(c, d2, kwargs) for c in d1.chunks]
-    return DTable(v, d1.tabletype)
+    l_chunks = d1.chunks
+    r_chunks = d2.chunks
+    n_l = length(l_chunks)
+    n_r = length(r_chunks)
+    n_r == 0 && return DTable([], d1.tabletype)
+
+    r0 = first(r_chunks)
+
+    # Phase 1: n_l × n_r pair tasks, all spawned at the top level (no nesting)
+    pair_tasks = [
+        Dagger.@spawn _leftjoin_pair(lc, rc, kwargs)
+        for lc in l_chunks, rc in r_chunks
+    ]
+
+    # Phase 2: one merge task per l-chunk, each takes n_r Phase 1 results as Dagger inputs
+    result_tasks = [
+        Dagger.spawn(_merge_leftjoin_pairs, l_chunks[i], r0, kwargs, pair_tasks[i, :]...)
+        for i in 1:n_l
+    ]
+
+    return DTable(result_tasks, d1.tabletype)
 end
 
 function leftjoin(d1::GDTable, d2; kwargs...)
@@ -73,9 +91,27 @@ function innerjoin(d1::DTable, d2; kwargs...)
 end
 
 function innerjoin(d1::DTable, d2::DTable; kwargs...)
-    f = (l, r, ks) -> _join(:innerjoin, l, r; ks...)
-    v = [Dagger.@spawn f(c, d2, kwargs) for c in d1.chunks]
-    return DTable(v, d1.tabletype)
+    l_chunks = d1.chunks
+    r_chunks = d2.chunks
+    n_l = length(l_chunks)
+    n_r = length(r_chunks)
+    n_r == 0 && return DTable([], d1.tabletype)
+
+    f_pair = (l, r, ks) -> _join(:innerjoin, l, r; ks...)
+
+    # Phase 1: n_l × n_r pair tasks, all spawned at the top level (no nesting)
+    pair_tasks = [
+        Dagger.@spawn f_pair(lc, rc, kwargs)
+        for lc in l_chunks, rc in r_chunks
+    ]
+
+    # Phase 2: one merge task per l-chunk, each takes n_r Phase 1 results as Dagger inputs
+    result_tasks = [
+        Dagger.spawn(_merge_inner_pairs, pair_tasks[i, :]...)
+        for i in 1:n_l
+    ]
+
+    return DTable(result_tasks, d1.tabletype)
 end
 
 function innerjoin(d1::GDTable, d2; kwargs...)
@@ -138,58 +174,52 @@ function _join(
 end
 
 """
-    _join(type::Symbol, l_chunk, r::DTable; kwargs...)
+    _leftjoin_pair(l_chunk, r_chunk, kwargs)
 
-Low level join method for `DTable` joins using the generic implementation.
-It joins an `l_chunk` with `r` assuming `r` is a `DTable`.
-In this case the join is split into multiple joins of `l_chunk` with each chunk of `r` and a final merge operation.
+Joins a single `l_chunk` against a single `r_chunk` for a left join.
+Returns `(inner_df, outer_l)` where `outer_l` is the set of l-row indices
+not matched by this particular r-chunk.
 """
-function _join(
-    type::Symbol,
-    l_chunk,
-    r::DTable;
-    on=nothing,
-    l_sorted=false,
-    r_sorted=false,
-    r_unique=false,
-    lookup=nothing,
-)
-    names, _, other_r, cmp_l, cmp_r = resolve_colnames(l_chunk, r, on)
+function _leftjoin_pair(l_chunk, r_chunk, kwargs)
+    on = get(kwargs, :on, nothing)
+    l_sorted = get(kwargs, :l_sorted, false)
+    r_sorted = get(kwargs, :r_sorted, false)
+    r_unique = get(kwargs, :r_unique, false)
+    lookup = get(kwargs, :lookup, nothing)
+    names, _, other_r, cmp_l, cmp_r = resolve_colnames(l_chunk, r_chunk, on)
+    inner_l, inner_r = match_inner_indices(l_chunk, r_chunk, cmp_l, cmp_r, lookup, r_sorted, l_sorted, r_unique)
+    inner_df = build_joined_table(:leftjoin, names, l_chunk, r_chunk, inner_l, inner_r, Set{UInt}(), other_r)
+    outer_l = find_outer_indices(l_chunk, inner_l)
+    return (inner_df, outer_l)
+end
 
-    process_one_chunk =
-        (type, l, r, cmp_l, cmp_r, other_r, lookup, r_sorted, l_sorted, r_unique) -> begin
-            inner_l, inner_r = match_inner_indices(
-                l, r, cmp_l, cmp_r, lookup, r_sorted, l_sorted, r_unique
-            )
-            inner_chunk = Dagger.tochunk(
-                build_joined_table(type, names, l, r, inner_l, inner_r, Set{UInt}(), other_r)
-            )
-            outer_l = type == :innerjoin ? Set{UInt}() : find_outer_indices(l, inner_l)
-            return inner_chunk, outer_l
-        end
+"""
+    _merge_inner_pairs(dfs...)
 
-    vs = [
-        Dagger.@spawn process_one_chunk(
-            type, l_chunk, chunk, cmp_l, cmp_r, other_r, lookup, r_sorted, l_sorted, r_unique
-        ) for chunk in r.chunks
-    ]
+Merges multiple inner-join DataFrames (one per r-chunk pair) into a single table.
+"""
+function _merge_inner_pairs(dfs...)
+    chunks = [Dagger.tochunk(df) for df in dfs]
+    return merge_chunks(materializer(first(dfs)), chunks)
+end
 
-    to_merge = Vector{Dagger.Chunk}()
-    sizehint!(to_merge, length(r.chunks))
+"""
+    _merge_leftjoin_pairs(l_chunk, r_chunk, kwargs, pairs...)
 
-    v = fetch.(vs)
-    append!(to_merge, getindex.(v, 1))
-
-    if type == :leftjoin
-        outer_l = intersect(getindex.(v, 2)...)
-        inner_l = inner_r = Vector{UInt}()
-        outer = Dagger.tochunk(
-            build_joined_table(type, names, l_chunk, r, inner_l, inner_r, outer_l, other_r)
-        )
-        push!(to_merge, outer)
-    end
-
-    return merge_chunks(materializer(l_chunk), to_merge)
+Merges multiple `(inner_df, outer_l)` pairs from Phase 1 into the final left-join result
+for one l-chunk. Computes truly-unmatched l-rows as the intersection of all outer_l sets.
+"""
+function _merge_leftjoin_pairs(l_chunk, r_chunk, kwargs, pairs...)
+    on = get(kwargs, :on, nothing)
+    names, _, other_r, _, _ = resolve_colnames(l_chunk, r_chunk, on)
+    inner_dfs = [p[1] for p in pairs]
+    outer_l_sets = [p[2] for p in pairs]
+    truly_outer_l = intersect(outer_l_sets...)
+    empty_inds = Vector{UInt}()
+    outer_df = build_joined_table(:leftjoin, names, l_chunk, r_chunk, empty_inds, empty_inds, truly_outer_l, other_r)
+    all_chunks = [Dagger.tochunk(df) for df in inner_dfs]
+    push!(all_chunks, Dagger.tochunk(outer_df))
+    return merge_chunks(materializer(l_chunk), all_chunks)
 end
 
 """

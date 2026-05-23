@@ -14,6 +14,11 @@ mutable struct DTable
     tabletype
     schema::Union{Nothing,Schema}
     chunk_lengths::Union{Nothing,Vector{Int64}}
+    schema_lock::ReentrantLock
+
+    # Keep the 4-arg call signature so all existing construction sites are unchanged.
+    DTable(chunks, tabletype, schema, chunk_lengths) =
+        new(chunks, tabletype, schema, chunk_lengths, ReentrantLock())
 end
 
 DTable(chunks::Vector, tabletype) = DTable(VTYPE(chunks), tabletype, nothing, nothing)

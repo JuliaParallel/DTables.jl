@@ -49,6 +49,7 @@ function match_inner_indices(l, r, l_ind::NTuple{N,Int}, r_ind::NTuple{N,Int}) w
     vr = Vector{UInt}()
     sizehint!(vl, l_length)
     sizehint!(vr, l_length)
+    id_vl_before = objectid(vl); id_vr_before = objectid(vr)
     for (oind, oel) in enumerate(rows(l))
         for (iind, iel) in enumerate(rows(r))
             if compare_rows_eq(oel, iel, l_ind, r_ind)
@@ -57,6 +58,13 @@ function match_inner_indices(l, r, l_ind::NTuple{N,Int}, r_ind::NTuple{N,Int}) w
             end
         end
     end
+    id_vl_after = objectid(vl); id_vr_after = objectid(vr)
+    if id_vl_before != id_vl_after || id_vr_before != id_vr_after
+        println(stderr, "VECTOR_CHANGED! vl_before=$id_vl_before vl_after=$id_vl_after vr_before=$id_vr_before vr_after=$id_vr_after")
+        flush(stderr)
+    end
+    println(stderr, "MII tid=$(Threads.threadid()) l_id=$(objectid(l)) r_id=$(objectid(r)) vl=$(objectid(vl))[$(length(vl))] vr=$(objectid(vr))[$(length(vr))]")
+    flush(stderr)
     return vl, vr
 end
 
