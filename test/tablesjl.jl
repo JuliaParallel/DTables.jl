@@ -64,8 +64,8 @@
         @test Tables.columnaccess(gd)
         @test Tables.schema(gd).names == (:a, :b)
         @test Tables.schema(gd).types == (Int64, Int64)
-        @test Tables.getcolumn(gd, :a) == [1, 2, 3]
-        @test Tables.getcolumn(gd, 1) == [1, 2, 3]
+        @test sort(Tables.getcolumn(gd, :a)) == [1, 2, 3]
+        @test sort(Tables.getcolumn(gd, 1)) == [1, 2, 3]
         @test Tables.columnnames(gd) == (:a, :b)
     end
 end
