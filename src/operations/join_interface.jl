@@ -158,6 +158,11 @@ function _join(
 
     process_one_chunk =
         (type, l, r, cmp_l, cmp_r, other_r, lookup, r_sorted, l_sorted, r_unique) -> begin
+            # Variables below MUST be `local`: identifiers `inner_l`, `inner_r`, `outer_l`
+            # are also assigned in the enclosing `_join` body, so Julia's soft-scope rules
+            # would otherwise capture them by reference. Multiple `Dagger.@spawn`ed
+            # invocations of this closure would then race on the same binding cells.
+            local inner_l, inner_r, outer_l
             inner_l, inner_r = match_inner_indices(
                 l, r, cmp_l, cmp_r, lookup, r_sorted, l_sorted, r_unique
             )

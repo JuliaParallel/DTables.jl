@@ -532,7 +532,7 @@ using OnlineStats
             @test isequal(lj1u, lj7)
             @test isequal(lj1, lj8)
             @test isequal(lj1, lj9)
-            # @test isequal(lj1, lj10)
+            @test isequal(lj1, lj10)
 
             ij1 = innerjoin(d1, d2, on=on)
             ij1u = innerjoin(d1, unique(d2, r_colsymbols), on=on)
@@ -557,7 +557,7 @@ using OnlineStats
             @test isequal(ij1u, ij7)
             @test isequal(ij1, ij8)
             @test isequal(ij1, ij9)
-            # @test isequal(ij1, ij10)
+            @test isequal(ij1, ij10)
             @test isequal(ij1, ij11)
         end
     end
