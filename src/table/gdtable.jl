@@ -129,7 +129,45 @@ function show(io::IO, ::MIME"text/plain", gd::GDTable)
     grouped_by_cols = gd.cols === nothing ? string(gd.grouping_function) : grouped_cols(gd)
     println(io, "GDTable with $(nchunks(gd)) partitions and $(length(gd)) keys")
     println(io, "Tabletype: $tabletype")
-    print(io, "Grouped by: $grouped_by_cols")
+    println(io, "Grouped by: $grouped_by_cols")
+
+    function keyshow(gd, key)
+        if gd.cols === nothing # grouping function is being used
+            "Function $(gd.grouping_function) = $key"
+        elseif typeof(key) <: NamedTuple # multi column case
+            s = ""
+            for x in keys(key)
+                s *= "$x = $(key[x]), "
+            end
+            s = s[1:(end - 2)] # remove last comma
+            return s
+        else # single column case
+            "$(gd.cols[1]) = $key"
+        end
+    end
+
+    function print_group(io, gd, key; prefix="", suffix="") # print a single group
+        d = gd[key]
+        println(io, "$(prefix)Group$(suffix) ($(length(d)) rows): $(keyshow(gd,key))")
+        pretty_table(io, d)
+        return nothing
+    end
+
+    sorted_keys = sort(collect(keys(gd)))
+    if !get(io, :limit, false)
+        ctr = 1
+        for key in sorted_keys
+            print_group(io, gd, key; suffix=" $(ctr)")
+            ctr += 1
+        end
+    else
+        fst, lst = first(sorted_keys), last(sorted_keys)
+        print_group(io, gd, fst; prefix="First ")
+        if fst != lst
+            println(io, "⋮")
+            print_group(io, gd, lst; prefix="Last ")
+        end
+    end
     return nothing
 end
 
