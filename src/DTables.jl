@@ -28,6 +28,7 @@ using Tables:
     materializer,
     partitioner,
     rows,
+    rowtable,
     schema,
     Schema
 
