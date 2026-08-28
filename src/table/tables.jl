@@ -43,7 +43,14 @@ end
 
 function determine_columnnames(table::DTable)
     s = determine_schema(table)
-    return s === nothing ? nothing : s.names
+    if s !== nothing
+        return s.names
+    end
+    if length(table.chunks) == 0
+        return ()
+    end
+    c = first(table.chunks)
+    return fetch(Dagger.@spawn columnnames(c))
 end
 
 function _getcolumn(table::DTable, col::Union{Symbol,Int})

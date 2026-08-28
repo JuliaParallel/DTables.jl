@@ -1,4 +1,5 @@
-const VTYPE = Vector{Union{Dagger.Chunk,Dagger.EagerThunk}}
+const ELTYPE = Union{Dagger.Chunk,Dagger.EagerThunk}
+const VTYPE = Vector{ELTYPE}
 
 """
     DTable
@@ -154,6 +155,11 @@ function _file_load(filename::AbstractString, loader_function, tabletype::Any)
     return tpart
 end
 
+function DTable(files::Vector{Dagger.File}; tabletype=nothing)
+    chunks = ELTYPE[file.chunk for file in files]
+    return DTable(chunks, tabletype)
+end
+
 """
     fetch(d::DTable)
 
@@ -230,7 +236,11 @@ Removes empty chunks from `d`.
 """
 function trim!(d::DTable)
     check_result = [Dagger.@spawn isnonempty(c) for c in d.chunks]
-    d.chunks = getindex.(filter(x -> fetch(check_result[x[1]]), collect(enumerate(d.chunks))), 2)
+    for idx in length(d.chunks):-1:1
+        if !fetch(check_result[idx])
+            deleteat!(d.chunks, idx)
+        end
+    end
     return d
 end
 
