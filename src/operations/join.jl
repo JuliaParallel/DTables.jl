@@ -41,22 +41,55 @@ end
     match_inner_indices(l, r, l_ind::NTuple{N,Int}, r_ind::NTuple{N,Int})
 
 Returns two vectors containing indices of matched rows.
-Standard non-optimized use case.
+Constructs a hash table to compare matching keys.
 """
 function match_inner_indices(l, r, l_ind::NTuple{N,Int}, r_ind::NTuple{N,Int}) where {N}
+    # Use the smaller table to construct the lookup table
+    l_bigger = length(rows(l)) >= length(rows(r))
+    if l_bigger
+        build_table = r
+        build_ind = r_ind
+        probe_table = l
+        probe_ind = l_ind
+    else
+        build_table = l
+        build_ind = l_ind
+        probe_table = r
+        probe_ind = r_ind
+    end
+
+    # Construct the lookup table
+    row_tuple = (row, cols) -> ([getcolumn(row, x) for x in cols]...,)
+    row_type = Base.to_tuple_type([eltype(getcolumn(build_table, ind)) for ind in build_ind])
+    lookup = Dict{row_type,Vector{UInt}}()
+    for (idx, row) in enumerate(rows(build_table))
+        key = row_tuple(row, build_ind)
+        idxs = get!(Vector{UInt}, lookup, key)
+        push!(idxs, idx)
+    end
+
+    # Find rows in the larger (probe) table that match with the build table entries
     l_length = length(rows(l))
     vl = Vector{UInt}()
     vr = Vector{UInt}()
     sizehint!(vl, l_length)
     sizehint!(vr, l_length)
-    for (oind, oel) in enumerate(rows(l))
-        for (iind, iel) in enumerate(rows(r))
-            if compare_rows_eq(oel, iel, l_ind, r_ind)
-                push!(vl, oind)
-                push!(vr, iind)
+    for (idx, row) in enumerate(rows(probe_table))
+        key = row_tuple(row, probe_ind)
+        if haskey(lookup, key)
+            build_idxs = lookup[key]
+            for build_idx in build_idxs
+                if l_bigger
+                    push!(vl, idx)
+                    push!(vr, build_idx)
+                else
+                    push!(vl, build_idx)
+                    push!(vr, idx)
+                end
             end
         end
     end
+
     return vl, vr
 end
 
